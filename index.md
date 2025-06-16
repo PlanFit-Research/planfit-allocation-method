@@ -8,13 +8,12 @@ layout: default
 **PlanFit Allocation Method (PAM)** is an open-source framework for
 matching household liabilities to capital-efficient portfolios.
 
-<div style="margin-top:1.2rem;">
+&nbsp;
 
-- 📄 Download the latest white paper  
-- 💾 [Replication code & data](https://github.com/PlanFit-Research)  
-- ✉️ Have a complex client scenario?  
-  [Email us](mailto:research@planfit.org) to collaborate.
+- 📄 **Download the latest white paper** (PDF coming soon)  
+- 💾 **[Replication code & data](https://github.com/PlanFit-Research)**  
+- ✉️ **[Email us](mailto:research@planfit.org) to collaborate**
 
-</div>
+&nbsp;
 
-<small>© 2025 PlanFit Research · Developed in collaboration with KeyBank Wealth Institute.</small>
+<small>© 2025 PlanFit Research · Developed in collaboration with .</small>
