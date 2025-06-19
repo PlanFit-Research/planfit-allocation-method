@@ -41,9 +41,9 @@ python pam_optimize.py
 > Cash therefore shows negative values whenever T-bill yield < inflation.
 
 > **Bond approximation**  
-> By default the 10-year Treasury return is proxied by average yield.
-> Users can uncomment the provided code block to pull FRED’s total-return
-> index `DGS10TBITTL` for 1973-present.
+> Bond returns are approximated via a constant-duration (≈8) model applied
+> to the FRED GS10 yield series. This replicates SBBI 10-year Treasury total
+> returns within ~50 bp and retains public-domain licensing.
 
 # 3  (Optional) sanity check
 python tests/sanity_check.py
