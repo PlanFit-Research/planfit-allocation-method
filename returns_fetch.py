@@ -32,7 +32,7 @@ ff_csv = pd.read_csv(
 )
 
 # Trim footer rows that start after the last valid date (marked by 'NaN')
-ff_csv = ff_csv[ff_csv.iloc[:, 0].str.match(r"^\d{6}$")]
+ff_csv = ff_csv[ff_csv.iloc[:, 0].str.match(r"^\d{6}$", na=False)]
 
 ff_csv = (
     ff_csv.rename(columns={"Unnamed: 0": "Date"})
