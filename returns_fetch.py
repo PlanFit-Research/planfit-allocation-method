@@ -91,34 +91,55 @@ df = (
 
 df["Year"] = df["Date"].dt.year
 
+# ---------- helper: geometric annual return ----------
+def geom(series):
+    """Compound monthly returns into one annual return."""
+    return (1 + series).prod() - 1
+
+# ---------- annual aggregation (1950-2022) ----------
 annual = (
     df.groupby("Year")
-    .agg(
-        {
-            "Mkt-RF": "mean",  # arithmetic mean of monthly excess
-            "RF": "mean",
-            "GS10": "mean",
-            "Infl": lambda x: (1 + x).prod() - 1,
-        }
-    )
-    .loc[1950:2022]
+      .agg({
+          "Mkt-RF": geom,     # excess stock return (geometric)
+          "RF":      geom,     # T-bill return (geometric)
+          "GS10":    "mean",   # use average yield as crude bond return
+          "Infl":    geom      # annual inflation
+      })
+      .loc[1950:2022]
 )
 
-# Nominal total returns (simple approximation for bonds)
-annual["Stocks_nom"] = annual["Mkt-RF"] + annual["RF"]
-annual["Cash_nom"] = annual["RF"]
-annual["Bonds_nom"] = annual["GS10"]
+# OPTIONAL: replace crude bond return with FRED total-return index
+"""
+fred_tri = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10TBITTL"
+tri = pd.read_csv(io.StringIO(requests.get(fred_tri, timeout=30).text))
+tri = tri.rename(columns={tri.columns[0]: "Date", tri.columns[1]: "TRI"})
+tri["Date"] = pd.to_datetime(tri["Date"], errors="coerce")
+tri = tri.dropna().replace(".", pd.NA).dropna()
+tri["Year"] = tri["Date"].dt.year
+tri["TRI"] = tri["TRI"].astype(float) / 100  # to decimal
+tri_annual = tri.groupby("Year")["TRI"].apply(geom)
+annual["GS10"] = annual["GS10"].combine_first(tri_annual)
+"""
 
-# Deflate to real
+# ---------- nominal totals ----------
+annual["Stocks_nom"] = annual["Mkt-RF"] + annual["RF"]
+annual["Cash_nom"]   = annual["RF"]
+annual["Bonds_nom"]  = annual["GS10"]      # still crude unless TRI block used
+
+# ---------- keep REAL returns (default) ----------
 for col in ["Stocks_nom", "Cash_nom", "Bonds_nom"]:
     annual[col.replace("_nom", "_real")] = (1 + annual[col]) / (1 + annual["Infl"]) - 1
 
 out = (
     annual[["Stocks_real", "Bonds_real", "Cash_real"]]
-    .reset_index()
-    .rename(columns={"Stocks_real": "Stocks", "Bonds_real": "Bonds", "Cash_real": "Cash"})
+      .reset_index()
+      .rename(columns={
+          "Stocks_real": "Stocks",
+          "Bonds_real":  "Bonds",
+          "Cash_real":   "Cash"})
 )
 
 csv_path = f"{DATA_DIR}/returns_1950_2022.csv"
 out.to_csv(csv_path, index=False, float_format="%.6f")
 print(f"Saved {csv_path}")
+
