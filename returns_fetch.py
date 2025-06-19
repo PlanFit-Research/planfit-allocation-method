@@ -44,23 +44,23 @@ ff_csv["Date"] = pd.to_datetime(ff_csv["Date"], format="%Y%m")
 ff_csv[["Mkt-RF", "RF"]] /= 100
 
 # ------------------------------------------------------------------ #
-# 2) Fetch 10-year Treasury constant-maturity yields (monthly, robust)
+# 2) 10-year Treasury total-return series
 # ------------------------------------------------------------------ #
-import io
-fred_t10_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GS10"
+fred_tri = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10TBITTL"
+tri_resp = requests.get(fred_tri, timeout=30)
+tri_resp.raise_for_status()
 
-resp = requests.get(fred_t10_url, timeout=30)
-resp.raise_for_status()                            # network errors → exception
+tri = pd.read_csv(io.StringIO(tri_resp.text))
+tri = tri.rename(columns={tri.columns[0]: "Date", tri.columns[1]: "TRI"})
+tri["Date"] = pd.to_datetime(tri["Date"], errors="coerce")
+tri = tri.dropna().replace(".", pd.NA).dropna()
+tri["TRI"] = tri["TRI"].astype(float) / 100          # index → decimal return
+tri["Year"] = tri["Date"].dt.year
+tri_annual = tri.groupby("Year")["TRI"].apply(geom)   # geometric annual return
 
-t10 = pd.read_csv(io.StringIO(resp.text))
-
-# First column may not be named 'DATE' if FRED adds notes; take the first col
-date_col = t10.columns[0]
-t10 = t10.rename(columns={date_col: "Date", t10.columns[1]: "GS10"})
-
-t10["Date"] = pd.to_datetime(t10["Date"], errors="coerce")
-t10 = t10.dropna(subset=["Date", "GS10"]).replace(".", pd.NA).dropna()
-t10["GS10"] = t10["GS10"].astype(float) / 100  # to decimal
+# If TRI unavailable before 1973, fall back to yield proxy
+yield_proxy = df.groupby("Year")["GS10"].mean()       # already in df
+annual_bond = yield_proxy.combine_first(tri_annual)
 
 # ------------------------------------------------------------------ #
 # 3) Fetch CPI (monthly, robust)
@@ -102,29 +102,15 @@ annual = (
       .agg({
           "Mkt-RF": geom,     # excess stock return (geometric)
           "RF":      geom,     # T-bill return (geometric)
-          "GS10":    "mean",   # use average yield as crude bond return
           "Infl":    geom      # annual inflation
       })
       .loc[1950:2022]
 )
 
-# OPTIONAL: replace crude bond return with FRED total-return index
-"""
-fred_tri = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10TBITTL"
-tri = pd.read_csv(io.StringIO(requests.get(fred_tri, timeout=30).text))
-tri = tri.rename(columns={tri.columns[0]: "Date", tri.columns[1]: "TRI"})
-tri["Date"] = pd.to_datetime(tri["Date"], errors="coerce")
-tri = tri.dropna().replace(".", pd.NA).dropna()
-tri["Year"] = tri["Date"].dt.year
-tri["TRI"] = tri["TRI"].astype(float) / 100  # to decimal
-tri_annual = tri.groupby("Year")["TRI"].apply(geom)
-annual["GS10"] = annual["GS10"].combine_first(tri_annual)
-"""
-
 # ---------- nominal totals ----------
+annual["Bonds_nom"] = annual_bond
 annual["Stocks_nom"] = annual["Mkt-RF"] + annual["RF"]
 annual["Cash_nom"]   = annual["RF"]
-annual["Bonds_nom"]  = annual["GS10"]      # still crude unless TRI block used
 
 # ---------- keep REAL returns (default) ----------
 for col in ["Stocks_nom", "Cash_nom", "Bonds_nom"]:
