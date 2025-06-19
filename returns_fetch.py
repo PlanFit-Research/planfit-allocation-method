@@ -120,5 +120,5 @@ out = (
 )
 
 csv_path = f"{DATA_DIR}/returns_1950_2022.csv"
-out.to_csv(csv_path, index=False)
+out.to_csv(csv_path, index=False, float_format="%.6f")
 print(f"Saved {csv_path}")
