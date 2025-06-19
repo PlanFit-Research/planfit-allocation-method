@@ -63,12 +63,22 @@ t10 = t10.dropna(subset=["Date", "GS10"]).replace(".", pd.NA).dropna()
 t10["GS10"] = t10["GS10"].astype(float) / 100  # to decimal
 
 # ------------------------------------------------------------------ #
-# 3) Fetch CPI for inflation adjustment
+# 3) Fetch CPI (monthly, robust)
 # ------------------------------------------------------------------ #
-fred_cpi = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL"
-cpi = pd.read_csv(fred_cpi, parse_dates=["DATE"]).rename(
-    columns={"DATE": "Date", "CPIAUCSL": "CPI"}
-)
+fred_cpi_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL"
+
+resp = requests.get(fred_cpi_url, timeout=30)
+resp.raise_for_status()
+
+cpi = pd.read_csv(io.StringIO(resp.text))
+
+# First column may be unnamed; take whatever is first
+cpi = cpi.rename(columns={cpi.columns[0]: "Date", cpi.columns[1]: "CPI"})
+cpi["Date"] = pd.to_datetime(cpi["Date"], errors="coerce")
+cpi = cpi.dropna(subset=["Date", "CPI"]).replace(".", pd.NA).dropna()
+cpi["CPI"] = cpi["CPI"].astype(float)
+
+# Inflation rate (monthly)
 cpi["Infl"] = cpi["CPI"].pct_change()
 
 # ------------------------------------------------------------------ #
