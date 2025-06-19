@@ -35,9 +35,11 @@ def pv_factor(weights, block):
     growth = max(growth, EPS)          # prevent <=0
     return 1 / growth                  # smaller is better
 
-def objective(w, blocks):
-    pv_values = [pv_factor(w, b) for b in blocks]
-    return np.percentile(pv_values, 95) 
+def objective(w, blocks, q=95):
+    pv_vals = [pv_factor(w, b) for b in blocks]
+    tail = np.percentile(pv_vals, q)
+    shortfalls = [v for v in pv_vals if v >= tail]
+    return sum(shortfalls) / len(shortfalls)   # CVaR
 
 def rolling_blocks(mat, h):
     return [mat[i : i + h] for i in range(len(mat) - h + 1)]
