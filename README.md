@@ -14,10 +14,10 @@ Allocation.”*
 | Path / file | Purpose |
 |-------------|---------|
 | `returns_fetch.py` | Auto-downloads public-domain annual real-return series (1950-2022) for U.S. Stocks, 10-yr Treasuries, and T-Bills. Saves to `data/`. |
-| `pam_optimize.py` | Optimises horizon-specific weights (1–30 years) that minimise the present-value capital required for a \$1 liability. Writes `horizon_table.csv`. |
+| `pam_optimize.py` | Optimizes horizon-specific weights (1–30 years) that minimize the present-value capital required for a \$1 liability. Writes `horizon_table.csv`. |
 | `horizon_table.csv` | **Generated output** – paste these five columns into the Excel supplement’s **Optimizer** tab. |
 | `supplement/PlanFit_Allocation_Method_Supplement.xlsx` | Companion workbook cited in the paper (README tab, inputs, calc engine, results). |
-| `tests/sanity_check.py` | Quick assertions that the optimiser table is 30 × 5 and each row sums to 1.0. |
+| `tests/sanity_check.py` | Quick assertions that the optimizer table is 30 × 5 and each row sums to 1.0. |
 | `requirements.txt` | Minimal Python deps: `numpy`, `pandas`, `scipy`, `requests`. |
 | `LICENSE` | MIT for code. |
 | `data/` | Download cache for raw returns (ignored by Git history). |
