@@ -47,3 +47,9 @@ python pam_optimize.py
 
 # 3  (Optional) sanity check
 python tests/sanity_check.py
+
+- **10-year Treasury Total Return**: annual series from
+  Professor Aswath Damodaran, NYU Stern School of Business
+  (https://pages.stern.nyu.edu/~adamodar/).  Licensed under
+  [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/);
+  redistributed here per license terms.
