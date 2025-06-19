@@ -94,6 +94,8 @@ damo = damo[["Year", "Bonds_nom_pct"]].dropna()
 damo["Year"] = damo["Year"].astype(int)
 damo["Bonds_nom"] = damo["Bonds_nom_pct"].astype(float) / 100
 
+annual = annual.merge(damo[["Year", "Bonds_nom"]], on="Year", how="left")
+
 # ------------------------------------------------------------------ #
 # 6) Convert all series to *real* returns
 # ------------------------------------------------------------------ #
