@@ -54,9 +54,9 @@ t10 = t10.dropna().replace(".", pd.NA).dropna()
 t10["GS10"] = t10["GS10"].astype(float) / 100
 
 # ------------------------------------------------------------------ #
-# 3) 10-year Treasury total-return index  (1973-present)
+# 3) 10-yr Treasury total-return index (ICE BofA 7-10 Y, via FRED)
 # ------------------------------------------------------------------ #
-fred_tri = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10TBITTL"
+fred_tri = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLCC0A7TRIV"
 tri_resp = requests.get(fred_tri, timeout=30)
 tri_resp.raise_for_status()
 
