@@ -1,12 +1,11 @@
 """
 returns_fetch.py
 ----------------
-Downloads public-domain data and builds an annual (1950-2022) *real*-return
-CSV for U.S. Stocks, 10-year Treasuries, and 3-month T-Bills.
+Builds an annual (1950-2022) *real*-return CSV for U.S. Stocks,
+10-year Treasuries, and 3-month T-Bills, using only public-domain inputs.
 
-• Stocks & RF  : Kenneth French Research Factors
-• Bonds (1973-) : FRED total-return index DGS10TBITTL
-  Bonds (1950-72): yield proxy (GS10 average)
+• Stocks & RF  : Kenneth French Research Factors (monthly)
+• Bonds        : duration-based total-return approximation from FRED GS10
 • CPI          : FRED CPIAUCSL
 
 Output: data/returns_1950_2022.csv
@@ -18,10 +17,12 @@ import pandas as pd
 DATA_DIR = "data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
-# ---------- helper: geometric annual return ----------
+
+# ---------- helper -------------------------------------------------
 def geom(series):
     """Compound monthly returns into one annual return."""
     return (1 + series).prod() - 1
+
 
 # ------------------------------------------------------------------ #
 # 1) French monthly factors  (Stocks excess + RF)
@@ -30,21 +31,17 @@ ff_url = (
     "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/"
     "F-F_Research_Data_Factors.CSV"
 )
-ff = pd.read_csv(
-    ff_url,
-    skiprows=3,
-    encoding="ISO-8859-1"
-)
+ff = pd.read_csv(ff_url, skiprows=3, encoding="ISO-8859-1")
 ff = ff[ff.iloc[:, 0].str.match(r"^\d{6}$", na=False)]
 ff = ff.rename(columns={"Unnamed: 0": "Date"})
 ff["Date"] = pd.to_datetime(ff["Date"], format="%Y%m")
 ff[["Mkt-RF", "RF"]] = ff[["Mkt-RF", "RF"]].astype(float) / 100
 
 # ------------------------------------------------------------------ #
-# 2) 10-year Treasury *yield* series  (proxy + for splice)
+# 2) FRED GS10 yields (monthly)
 # ------------------------------------------------------------------ #
-fred_yield = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GS10"
-y_resp = requests.get(fred_yield, timeout=30)
+y_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GS10"
+y_resp = requests.get(y_url, timeout=30)
 y_resp.raise_for_status()
 
 t10 = pd.read_csv(io.StringIO(y_resp.text))
@@ -54,29 +51,10 @@ t10 = t10.dropna().replace(".", pd.NA).dropna()
 t10["GS10"] = t10["GS10"].astype(float) / 100
 
 # ------------------------------------------------------------------ #
-# 3) Build 10-year Treasury total-return approximation (duration method)
+# 3) CPI series (monthly)
 # ------------------------------------------------------------------ #
-DUR = 8  # constant duration assumption for a 10-year bond
-
-# lagged yield to act as starting coupon
-df["Yield_prev"] = df["GS10"].shift(1)
-
-# Monthly bond return: coupon (prev yield/12) minus price impact (-DUR * Δyield)
-df["Bond_ret_mo"] = df["Yield_prev"] / 12 - DUR * (df["GS10"] - df["Yield_prev"])
-
-# Replace any NA in first row
-df["Bond_ret_mo"] = df["Bond_ret_mo"].fillna(0)
-
-# Geometric chain to annual nominal returns
-bond_annual = df.groupby("Year")["Bond_ret_mo"].apply(geom)
-
-annual["Bonds_nom"] = bond_annual
-
-# ------------------------------------------------------------------ #
-# 4) CPI series
-# ------------------------------------------------------------------ #
-fred_cpi = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL"
-cpi_resp = requests.get(fred_cpi, timeout=30)
+cpi_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL"
+cpi_resp = requests.get(cpi_url, timeout=30)
 cpi_resp.raise_for_status()
 
 cpi = pd.read_csv(io.StringIO(cpi_resp.text))
@@ -87,14 +65,21 @@ cpi["CPI"] = cpi["CPI"].astype(float)
 cpi["Infl"] = cpi["CPI"].pct_change()
 
 # ------------------------------------------------------------------ #
-# 5) Merge monthly frames
+# 4) Merge monthly frames
 # ------------------------------------------------------------------ #
 df = (
     ff.merge(t10, on="Date", how="inner")
       .merge(cpi[["Date", "Infl"]], on="Date", how="inner")
 )
-
 df["Year"] = df["Date"].dt.year
+
+# ------------------------------------------------------------------ #
+# 5) Duration-based bond total-return approximation
+# ------------------------------------------------------------------ #
+DUR = 8  # constant effective duration for a 10-year bond
+df["Yield_prev"] = df["GS10"].shift(1)
+df["Bond_ret_mo"] = df["Yield_prev"] / 12 - DUR * (df["GS10"] - df["Yield_prev"])
+df["Bond_ret_mo"] = df["Bond_ret_mo"].fillna(0)
 
 # ------------------------------------------------------------------ #
 # 6) Annual aggregation (1950-2022)
@@ -104,13 +89,11 @@ annual = (
       .agg({
           "Mkt-RF": geom,
           "RF":      geom,
+          "Bond_ret_mo": geom,
           "Infl":    geom})
       .loc[1950:2022]
+      .rename(columns={"Bond_ret_mo": "Bonds_nom"})
 )
-
-# Bond splice: TRI where available, otherwise yield proxy
-yield_proxy = df.groupby("Year")["GS10"].mean()
-annual["Bonds_nom"] = yield_proxy.combine_first(tri_annual)
 
 # Nominal stock & cash totals
 annual["Stocks_nom"] = annual["Mkt-RF"] + annual["RF"]
@@ -120,7 +103,9 @@ annual["Cash_nom"]   = annual["RF"]
 for col in ["Stocks_nom", "Bonds_nom", "Cash_nom"]:
     annual[col.replace("_nom", "_real")] = (1 + annual[col]) / (1 + annual["Infl"]) - 1
 
-# Build output
+# ------------------------------------------------------------------ #
+# 7) Build output CSV
+# ------------------------------------------------------------------ #
 out = (
     annual[["Stocks_real", "Bonds_real", "Cash_real"]]
       .reset_index()
