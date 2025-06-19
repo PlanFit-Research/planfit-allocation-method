@@ -70,7 +70,7 @@ df["Year"] = df["Date"].dt.year
 # ------------------------------------------------------------------ #
 # 5) Duration-based bond total-return approximation
 # ------------------------------------------------------------------ #
-DUR = 8  # constant effective duration for a 10-year bond
+DUR = 5  # constant effective duration for a 6-year bond
 df["Yield_prev"] = df["GS10"].shift(1)
 df["Bond_ret_mo"] = df["Yield_prev"] / 12 - DUR * (df["GS10"] - df["Yield_prev"])
 df["Bond_ret_mo"] = df["Bond_ret_mo"].fillna(0)
