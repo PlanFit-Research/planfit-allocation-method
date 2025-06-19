@@ -33,7 +33,7 @@ def pv_factor(w, block):
     return 1 / growth
 
 def objective(w, blocks):
-    return np.median([pv_factor(w, blk) for blk in blocks])
+    return max(pv_factor(w, blk) for blk in blocks)   # minimise the *maximum* PV factor
 
 def rolling_blocks(mat, h):
     return [mat[i : i + h] for i in range(len(mat) - h + 1)]
@@ -70,5 +70,9 @@ for h in range(1, H_MAX + 1):
     print(f"h={h:2d}  stocks={w[0]:.4f}  bonds={w[1]:.4f}  cash={w[2]:.4f}  disc={d:.4f}")
 
 cols = ["Time_Horizon_Yrs", "Pct_Stocks", "Pct_Bonds", "Pct_Cash", "Safest_Discount"]
-pd.DataFrame(rows, columns=cols).to_csv(OUT_CSV, index=False)
+pd.DataFrame(rows, columns=cols).to_csv(
+    OUT_CSV,
+    index=False,
+    float_format="%.6f"      # six-decimal numeric strings
+)
 print(f"\nSaved {OUT_CSV}")
