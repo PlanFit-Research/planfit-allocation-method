@@ -35,9 +35,9 @@ def pv_factor(weights, block):
     growth = max(growth, EPS)          # prevent <=0
     return 1 / growth                  # smaller is better
 
-def objective(weights, blocks):
-    """Worst-case PV factor across all blocks (minimax)."""
-    return max(pv_factor(weights, blk) for blk in blocks)
+def objective(w, blocks):
+    pv_values = [pv_factor(w, b) for b in blocks]
+    return np.percentile(pv_values, 95) 
 
 def rolling_blocks(mat, h):
     return [mat[i : i + h] for i in range(len(mat) - h + 1)]
