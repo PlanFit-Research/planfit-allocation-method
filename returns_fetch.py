@@ -1,12 +1,12 @@
 """
 returns_fetch.py
 ----------------
-Builds an annual (1950-2022) *real*-return CSV for U.S. Stocks,
-10-year Treasuries, and 3-month T-Bills, using only public-domain inputs.
+Builds an annual (1950-2022) *real* return CSV for U.S. Stocks,
+10-year Treasuries, and 3-month T-Bills using only public-domain inputs.
 
-• Stocks & RF  : Kenneth French Research Factors (monthly)
-• Bonds        : duration-based total-return approximation from FRED GS10
-• CPI          : FRED CPIAUCSL
+• Stocks & RF : Kenneth French Research Factors (monthly).
+• Bonds       : duration-based total-return approximation from FRED GS10.
+• CPI         : FRED CPIAUCSL.
 
 Output: data/returns_1950_2022.csv
 """
@@ -41,10 +41,7 @@ ff[["Mkt-RF", "RF"]] = ff[["Mkt-RF", "RF"]].astype(float) / 100
 # 2) FRED GS10 yields (monthly)
 # ------------------------------------------------------------------ #
 y_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GS10"
-y_resp = requests.get(y_url, timeout=30)
-y_resp.raise_for_status()
-
-t10 = pd.read_csv(io.StringIO(y_resp.text))
+t10 = pd.read_csv(io.StringIO(requests.get(y_url, timeout=30).text))
 t10 = t10.rename(columns={t10.columns[0]: "Date", t10.columns[1]: "GS10"})
 t10["Date"] = pd.to_datetime(t10["Date"], errors="coerce")
 t10 = t10.dropna().replace(".", pd.NA).dropna()
@@ -54,10 +51,7 @@ t10["GS10"] = t10["GS10"].astype(float) / 100
 # 3) CPI series (monthly)
 # ------------------------------------------------------------------ #
 cpi_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL"
-cpi_resp = requests.get(cpi_url, timeout=30)
-cpi_resp.raise_for_status()
-
-cpi = pd.read_csv(io.StringIO(cpi_resp.text))
+cpi = pd.read_csv(io.StringIO(requests.get(cpi_url, timeout=30).text))
 cpi = cpi.rename(columns={cpi.columns[0]: "Date", cpi.columns[1]: "CPI"})
 cpi["Date"] = pd.to_datetime(cpi["Date"], errors="coerce")
 cpi = cpi.dropna().replace(".", pd.NA).dropna()
@@ -87,10 +81,10 @@ df["Bond_ret_mo"] = df["Bond_ret_mo"].fillna(0)
 annual = (
     df.groupby("Year")
       .agg({
-          "Mkt-RF": geom,
-          "RF":      geom,
-          "Bond_ret_mo": geom,
-          "Infl":    geom})
+          "Mkt-RF":     geom,
+          "RF":         geom,
+          "Bond_ret_mo":geom,
+          "Infl":       geom})
       .loc[1950:2022]
       .rename(columns={"Bond_ret_mo": "Bonds_nom"})
 )
