@@ -44,16 +44,23 @@ ff_csv["Date"] = pd.to_datetime(ff_csv["Date"], format="%Y%m")
 ff_csv[["Mkt-RF", "RF"]] /= 100
 
 # ------------------------------------------------------------------ #
-# 2) Fetch 10-year Treasury constant-maturity yields (monthly)
+# 2) Fetch 10-year Treasury constant-maturity yields (monthly, robust)
 # ------------------------------------------------------------------ #
-fred_t10 = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GS10"
-t10 = (
-    pd.read_csv(fred_t10, parse_dates=["DATE"])
-    .rename(columns={"DATE": "Date", "GS10": "GS10"})
-    .replace(".", pd.NA)
-    .dropna()
-)
-t10["GS10"] = t10["GS10"].astype(float) / 100
+import io
+fred_t10_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GS10"
+
+resp = requests.get(fred_t10_url, timeout=30)
+resp.raise_for_status()                            # network errors → exception
+
+t10 = pd.read_csv(io.StringIO(resp.text))
+
+# First column may not be named 'DATE' if FRED adds notes; take the first col
+date_col = t10.columns[0]
+t10 = t10.rename(columns={date_col: "Date", t10.columns[1]: "GS10"})
+
+t10["Date"] = pd.to_datetime(t10["Date"], errors="coerce")
+t10 = t10.dropna(subset=["Date", "GS10"]).replace(".", pd.NA).dropna()
+t10["GS10"] = t10["GS10"].astype(float) / 100  # to decimal
 
 # ------------------------------------------------------------------ #
 # 3) Fetch CPI for inflation adjustment
