@@ -11,7 +11,7 @@ Builds an annual (1950-2022) *real* return CSV for U.S. Stocks,
 Output: data/returns_1950_2022.csv
 """
 
-import os, io, requests
+import os, io, pathlib, sys, requests
 import pandas as pd
 
 DATA_DIR = "data"
@@ -65,25 +65,34 @@ annual = (
 )
 
 # ------------------------------------------------------------------ #
-# 5) Damodaran 10-year Treasury Total Return (annual, nominal)
+# 5) Damodaran 10-Year Treasury Total Return (annual, .xls file, CC-BY)
 # ------------------------------------------------------------------ #
-damo_url = (
-    "http://pages.stern.nyu.edu/~adamodar/pc/datasets/histretSP_21.csv"
+damo_url = "https://www.stern.nyu.edu/~adamodar/pc/datasets/histretSP.xls"
+
+try:
+    xls_bytes = requests.get(damo_url, timeout=30).content
+    damo = pd.read_excel(io.BytesIO(xls_bytes), sheet_name=0)  # first sheet
+except Exception as e:
+    print("⚠  Download failed:", e)
+    local_path = pathlib.Path(DATA_DIR) / "histretSP.xls"
+    if not local_path.exists():
+        sys.exit("Damodaran file missing. Download it and place in data/ .")
+    damo = pd.read_excel(local_path, sheet_name=0)
+
+# Harmonise column names
+damo.columns = (
+    damo.columns.str.strip()
+                 .str.replace(r"\s+", " ", regex=True)
+                 .str.lower()
 )
-damo = pd.read_csv(damo_url)
-damo = damo.rename(
-    columns={
-        damo.columns[0]: "Year",
-        "10 year T.Bond": "Bonds_nom_pct"})
+
+# Variants I've seen: "10 year t.bond", "10 yr t.bond"
+bond_col = [c for c in damo.columns if "10" in c and "bond" in c][0]
+
+damo = damo.rename(columns={damo.columns[0]: "Year", bond_col: "Bonds_nom_pct"})
 damo = damo[["Year", "Bonds_nom_pct"]].dropna()
 damo["Year"] = damo["Year"].astype(int)
-damo["Bonds_nom"] = damo["Bonds_nom_pct"].astype(float) / 100  # to decimal
-
-# Merge into annual table
-annual = annual.merge(
-    damo[["Year", "Bonds_nom"]],
-    on="Year", how="left"
-)
+damo["Bonds_nom"] = damo["Bonds_nom_pct"].astype(float) / 100
 
 # ------------------------------------------------------------------ #
 # 6) Convert all series to *real* returns
