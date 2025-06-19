@@ -65,29 +65,36 @@ annual = (
 )
 
 # ------------------------------------------------------------------ #
-# 5) Damodaran 10-Year Treasury Total Return (annual, .xls file, CC-BY)
+# 5) Damodaran 10-Year Treasury Total Return (annual .xls, CC-BY)
 # ------------------------------------------------------------------ #
 damo_url = "https://www.stern.nyu.edu/~adamodar/pc/datasets/histretSP.xls"
 
+def load_damodaran_xls(path_or_bytes):
+    # read sheet with no header
+    raw = pd.read_excel(path_or_bytes, sheet_name=0, header=None, dtype=str)
+    # find the first row whose first cell (col 0) == 'Year'
+    header_idx = raw[raw.iloc[:, 0].str.strip().str.lower() == "year"].index[0]
+    df = pd.read_excel(path_or_bytes, sheet_name=0, header=header_idx)
+    return df
+
 try:
     xls_bytes = requests.get(damo_url, timeout=30).content
-    damo = pd.read_excel(io.BytesIO(xls_bytes), sheet_name=0)  # first sheet
+    damo = load_damodaran_xls(io.BytesIO(xls_bytes))
 except Exception as e:
     print("⚠  Download failed:", e)
     local_path = pathlib.Path(DATA_DIR) / "histretSP.xls"
     if not local_path.exists():
-        sys.exit("Damodaran file missing. Download it and place in data/ .")
-    damo = pd.read_excel(local_path, sheet_name=0)
+        sys.exit("Damodaran file missing. Download and place it in data/ .")
+    damo = load_damodaran_xls(local_path)
 
-# Harmonise column names
+# harmonise column names
 damo.columns = (
     damo.columns.str.strip()
                  .str.replace(r"\s+", " ", regex=True)
                  .str.lower()
 )
 
-# Variants I've seen: "10 year t.bond", "10 yr t.bond"
-bond_col = [c for c in damo.columns if "10" in c and "bond" in c][0]
+bond_col = [c for c in damo.columns if "bond" in c][0]   # any column with 'bond'
 
 damo = damo.rename(columns={damo.columns[0]: "Year", bond_col: "Bonds_nom_pct"})
 damo = damo[["Year", "Bonds_nom_pct"]].dropna()
