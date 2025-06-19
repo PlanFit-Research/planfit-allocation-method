@@ -18,6 +18,7 @@ OUT_CSV = "horizon_table.csv"
 H_MAX = 30
 INIT = np.array([0.34, 0.33, 0.33])
 TOL = 1e-9
+EPS = 1e-9    # tiny floor to avoid divide-by-zero
 
 # ------------------------------------------------------------------ #
 # Helper functions
@@ -28,12 +29,15 @@ def load_returns(path):
         raise ValueError("CSV must have columns Stocks, Bonds, Cash")
     return df[["Stocks", "Bonds", "Cash"]].to_numpy()
 
-def pv_factor(w, block):
-    growth = np.prod(1 + block @ w)
-    return 1 / growth
+def pv_factor(weights, block):
+    """Present-value factor for one rolling block."""
+    growth = np.prod(1 + block @ weights)
+    growth = max(growth, EPS)          # prevent <=0
+    return 1 / growth                  # smaller is better
 
-def objective(w, blocks):
-    return max(pv_factor(w, blk) for blk in blocks)   # minimise the *maximum* PV factor
+def objective(weights, blocks):
+    """Worst-case PV factor across all blocks (minimax)."""
+    return max(pv_factor(weights, blk) for blk in blocks)
 
 def rolling_blocks(mat, h):
     return [mat[i : i + h] for i in range(len(mat) - h + 1)]
