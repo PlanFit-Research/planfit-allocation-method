@@ -54,19 +54,24 @@ t10 = t10.dropna().replace(".", pd.NA).dropna()
 t10["GS10"] = t10["GS10"].astype(float) / 100
 
 # ------------------------------------------------------------------ #
-# 3) 10-yr Treasury total-return index (ICE BofA 7-10 Y, via FRED)
+# 3) 10-year Treasury total-return index  (use S&P 10-yr TRI if available)
 # ------------------------------------------------------------------ #
-fred_tri = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLCC0A7TRIV"
-tri_resp = requests.get(fred_tri, timeout=30)
-tri_resp.raise_for_status()
+tri_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=SPBD10T"
 
-tri = pd.read_csv(io.StringIO(tri_resp.text))
-tri = tri.rename(columns={tri.columns[0]: "Date", tri.columns[1]: "TRI"})
-tri["Date"] = pd.to_datetime(tri["Date"], errors="coerce")
-tri = tri.dropna().replace(".", pd.NA).dropna()
-tri["TRI"] = tri["TRI"].astype(float) / 100
-tri["Year"] = tri["Date"].dt.year
-tri_annual = tri.groupby("Year")["TRI"].apply(geom)   # geometric annual return
+try:
+    tri_resp = requests.get(tri_url, timeout=30)
+    tri_resp.raise_for_status()
+
+    tri = pd.read_csv(io.StringIO(tri_resp.text))
+    tri = tri.rename(columns={tri.columns[0]: "Date", tri.columns[1]: "TRI"})
+    tri["Date"] = pd.to_datetime(tri["Date"], errors="coerce")
+    tri = tri.dropna().replace(".", pd.NA).dropna()
+    tri["TRI"] = tri["TRI"].astype(float) / 100          # index → decimal return
+    tri["Year"] = tri["Date"].dt.year
+    tri_annual = tri.groupby("Year")["TRI"].apply(geom)   # geometric annual ret
+except Exception as e:
+    print("⚠  Could not fetch SPBD10T TRI; falling back to yield proxy.", e)
+    tri_annual = pd.Series(dtype=float)  # empty series so combine_first uses yield
 
 # ------------------------------------------------------------------ #
 # 4) CPI series
