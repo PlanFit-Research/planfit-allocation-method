@@ -17,24 +17,31 @@ DATA_DIR = "data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
 # ------------------------------------------------------------------ #
-# 1) Fetch French Monthly Factors (ZIP -> CSV)
+# 1) Fetch French Monthly Factors (direct CSV)
 # ------------------------------------------------------------------ #
-ff_zip_url = (
-    "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/Monthly_Factors.zip"
+ff_csv_url = (
+    "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/"
+    "F-F_Research_Data_Factors.CSV"
 )
-ff_bytes = requests.get(ff_zip_url, timeout=30).content
-mzip = zipfile.ZipFile(io.BytesIO(ff_bytes))
-ff_csv = pd.read_csv(mzip.open("F-F_Research_Data_Factors.CSV"), skiprows=3)
+
+# Ken French CSVs use Windows-1252 encoding; pandas can load from URL
+ff_csv = pd.read_csv(
+    ff_csv_url,
+    skiprows=3,               # skip header lines
+    encoding="ISO-8859-1"     # avoid UnicodeDecodeError
+)
+
+# Trim footer rows that start after the last valid date (marked by 'NaN')
+ff_csv = ff_csv[ff_csv.iloc[:, 0].str.match(r"^\d{6}$")]
 
 ff_csv = (
     ff_csv.rename(columns={"Unnamed: 0": "Date"})
-    .query("Date != 'Annual'")
-    .astype({"Date": str})
+    .astype({"Date": str, "Mkt-RF": float, "RF": float})
 )
 ff_csv["Date"] = pd.to_datetime(ff_csv["Date"], format="%Y%m")
 
-# Keep Mkt-RF (excess stock) and RF (1-Mo T-Bill) and convert to decimals
-ff_csv[["Mkt-RF", "RF"]] = ff_csv[["Mkt-RF", "RF"]].astype(float) / 100
+# Convert to decimal returns
+ff_csv[["Mkt-RF", "RF"]] /= 100
 
 # ------------------------------------------------------------------ #
 # 2) Fetch 10-year Treasury constant-maturity yields (monthly)
