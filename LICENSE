@@ -3,19 +3,40 @@ MIT License
 Copyright (c) 2025 PlanFit Research
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
+of this software and associated documentation files (the “Software”), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The above copyright notice, this permission notice, **and the NOTICE section
+below** shall be included in all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+--------------------------------------------------------------------
+NOTICE  (informational; not a license term)
+--------------------------------------------------------------------
+1.  **KeyBank disclaimer**  
+    All views expressed in this repository are solely those of the author
+    and do not necessarily reflect the views of KeyBank, National Association,
+    or its affiliates.
+
+2.  **Damodaran bond data (histretSP_clean.csv)**  
+    © Aswath Damodaran and NYU Stern School of Business.  
+    Licensed under the Creative Commons Attribution 4.0 International
+    (CC-BY 4.0) license.  
+    You must retain this attribution if you redistribute the file or any
+    derivative works.
+
+3.  **Public-domain sources**  
+    – Kenneth French Research Factors (Tuck School of Business)  
+    – CPIAUCSL series, Federal Reserve Bank of St. Louis (FRED)
+
+No endorsement by any third-party data provider is expressed or implied.
