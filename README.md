@@ -48,6 +48,12 @@ python pam_optimize.py
 # 3  (Optional) sanity check
 python tests/sanity_check.py
 
-Bond returns: “10-Year Treasury Total Return” file (histretSP.xls) from
-Professor Aswath Damodaran, NYU Stern — © CC-BY 4.0.  
-The Excel file is stored verbatim in this repo for reproducibility.
+### Bond return data (Damodaran)
+Download **histretSP.xls** from  
+<https://www.stern.nyu.edu/~adamodar/pc/datasets/histretSP.xls>,  
+delete the prefatory rows so the first row is the header  
+`Year, ... , 10 year T.Bond, ...`, and save the sheet as  
+`data/histretSP_clean.csv`.  
+The file is © Aswath Damodaran, NYU Stern, licensed CC-BY 4.0; redistribution
+within this repository is permitted under that licence.
+
