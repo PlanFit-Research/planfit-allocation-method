@@ -46,7 +46,6 @@ Allocation.”*
 
 ## Quick-start
 
-```bash
 # 1  Create and activate virtual environment
 python -m venv venv
 # Windows:
