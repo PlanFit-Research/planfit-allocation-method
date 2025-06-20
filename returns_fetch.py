@@ -86,8 +86,24 @@ damo.columns = (
                  .str.lower()
 )
 
-# pick the column that contains both 'return' and 'bond'
-bond_col = [c for c in damo.columns if "return" in c and "bond" in c][0]
+# --- robust bond column pick --------------------------------------
+numeric_cols = (
+    damo.drop(columns="year")
+        .apply(lambda s: pd.to_numeric(s.str.rstrip("%"), errors="coerce"))
+)
+
+# choose the numeric column whose name contains 'bond' OR ends with 'return'
+bond_candidates = [
+    c for c in numeric_cols.columns
+    if ("bond" in c) or (c.endswith("return"))
+]
+
+if not bond_candidates:
+    raise ValueError(
+        f"No bond return column found. Columns were: {list(damo.columns)}"
+    )
+
+bond_col = bond_candidates[0]
 
 damo = (
     damo[["year", bond_col]]
