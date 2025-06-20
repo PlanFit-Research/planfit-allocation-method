@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 
-RET_CSV = "data/returns_1950_2019.csv"
+RET_CSV = "data/returns_1950_2022.csv"
 OUT_CSV = "horizon_table.csv"
 H_MAX = 30
 INIT = np.array([0.34, 0.33, 0.33])
