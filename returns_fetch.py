@@ -4,9 +4,9 @@ returns_fetch.py
 Builds an annual (1950-2022) *real* return CSV for U.S. Stocks,
 10-year Treasuries, and 3-month T-Bills.
 
-• Stocks & RF : Kenneth French Research Factors (monthly)
+• Stocks & RF : Kenneth French Research Factors (monthly, public domain)
 • Bonds       : Damodaran “10-year Treasury Total Return” (annual, CC-BY 4.0)
-• CPI         : FRED CPIAUCSL
+• CPI         : FRED CPIAUCSL (public domain)
 
 Output: data/returns_1950_2022.csv
 """
@@ -18,14 +18,14 @@ DATA_DIR = "data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
 
-# ---------- helpers ------------------------------------------------
+# ---------- helper -------------------------------------------------
 def geom(series):
     """Compound monthly returns into one annual return."""
     return (1 + series).prod() - 1
 
 
 # ------------------------------------------------------------------ #
-# 1) French monthly factors  (Stocks excess + RF)
+# 1) French monthly factors (Stocks excess & RF)
 # ------------------------------------------------------------------ #
 ff_url = (
     "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/"
@@ -38,7 +38,7 @@ ff["Date"] = pd.to_datetime(ff["Date"], format="%Y%m")
 ff[["Mkt-RF", "RF"]] = ff[["Mkt-RF", "RF"]].astype(float) / 100
 
 # ------------------------------------------------------------------ #
-# 2) CPI series (monthly, real deflator)
+# 2) CPI series (monthly, for real deflation)
 # ------------------------------------------------------------------ #
 cpi_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL"
 cpi = pd.read_csv(io.StringIO(requests.get(cpi_url, timeout=30).text))
@@ -49,13 +49,13 @@ cpi["CPI"] = cpi["CPI"].astype(float)
 cpi["Infl"] = cpi["CPI"].pct_change()
 
 # ------------------------------------------------------------------ #
-# 3) Merge French factors + CPI  → monthly master frame
+# 3) Merge French factors + CPI  → monthly master
 # ------------------------------------------------------------------ #
 df = ff.merge(cpi[["Date", "Infl"]], on="Date", how="inner")
 df["Year"] = df["Date"].dt.year
 
 # ------------------------------------------------------------------ #
-# 4) Aggregate to annual (Stocks, Cash, Inflation)
+# 4) Aggregate to annual (Stocks_excess, Cash, Inflation)
 # ------------------------------------------------------------------ #
 annual = (
     df.groupby("Year")
@@ -64,33 +64,51 @@ annual = (
       .rename(columns={"Mkt-RF": "Stocks_nom", "RF": "Cash_nom"})
 )
 
+# add risk-free to excess return to get TOTAL stock return
+annual["Stocks_nom"] = annual["Stocks_nom"] + annual["Cash_nom"]
+
 # ------------------------------------------------------------------ #
 # 5) Damodaran 10-Year Treasury Total Return (clean CSV in data/)
 # ------------------------------------------------------------------ #
 csv_path = pathlib.Path(DATA_DIR) / "histretSP_clean.csv"
 if not csv_path.exists():
-    sys.exit("Damodaran CSV not found. Follow README to create "
-             "data/histretSP_clean.csv.")
+    sys.exit(
+        "Damodaran CSV not found. See README for instructions to place "
+        "histretSP_clean.csv in the data/ folder."
+    )
+
 damo = pd.read_csv(csv_path)
 
-# Harmonise column names
-damo.columns = (damo.columns.str.strip()
-                            .str.replace(r"\s+", " ", regex=True)
-                            .str.lower())
+# standardise headers
+damo.columns = (
+    damo.columns.str.strip()
+                 .str.replace(r"\s+", " ", regex=True)
+                 .str.lower()
+)
 
-bond_col = [c for c in damo.columns if "bond" in c][0]   # e.g. '10 year t.bond'
+# pick the column that contains both 'return' and 'bond'
+bond_col = [c for c in damo.columns if "return" in c and "bond" in c][0]
 
-damo = (damo[["year", bond_col]]
-          .rename(columns={"year": "Year", bond_col: "Bonds_nom_pct"})
-          .dropna())
+damo = (
+    damo[["year", bond_col]]
+      .rename(columns={"year": "Year", bond_col: "Bonds_nom_pct"})
+      .dropna()
+)
 
-damo["Year"] = damo["Year"].astype(int)
-damo["Bonds_nom"] = damo["Bonds_nom_pct"].astype(float) / 100
+# restrict to 1950-2022 and convert % → decimal
+damo = damo[damo["Year"].between(1950, 2022)]
+damo["Bonds_nom"] = (
+    damo["Bonds_nom_pct"]
+        .astype(str)
+        .str.rstrip("%")
+        .astype(float) / 100
+)
 
+# merge into annual table
 annual = annual.merge(damo[["Year", "Bonds_nom"]], on="Year", how="left")
 
 # ------------------------------------------------------------------ #
-# 6) Convert all series to *real* returns
+# 6) Convert nominal series to *real* returns
 # ------------------------------------------------------------------ #
 for col in ["Stocks_nom", "Bonds_nom", "Cash_nom"]:
     annual[col.replace("_nom", "_real")] = (
@@ -98,18 +116,17 @@ for col in ["Stocks_nom", "Bonds_nom", "Cash_nom"]:
     )
 
 # ------------------------------------------------------------------ #
-# 7) Build output CSV
+# 7) Write output CSV
 # ------------------------------------------------------------------ #
 out = (
     annual[["Stocks_real", "Bonds_real", "Cash_real"]]
       .reset_index()
-      .rename(
-          columns={
-              "Stocks_real": "Stocks",
-              "Bonds_real": "Bonds",
-              "Cash_real": "Cash"})
+      .rename(columns={
+          "Stocks_real": "Stocks",
+          "Bonds_real":  "Bonds",
+          "Cash_real":   "Cash"})
 )
 
-csv_path = f"{DATA_DIR}/returns_1950_2022.csv"
-out.to_csv(csv_path, index=False, float_format="%.6f")
-print(f"Saved {csv_path}")
+out_path = pathlib.Path(DATA_DIR) / "returns_1950_2022.csv"
+out.to_csv(out_path, index=False, float_format="%.6f")
+print(f"Saved {out_path}")
