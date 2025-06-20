@@ -40,11 +40,6 @@ python pam_optimize.py
 > All series are expressed in *real* terms after CPI adjustment.  
 > Cash therefore shows negative values whenever T-bill yield < inflation.
 
-> **Bond approximation**  
-> Bond returns are approximated via a constant-duration (≈8) model applied
-> to the FRED GS10 yield series. This replicates SBBI 10-year Treasury total
-> returns within ~50 bp and retains public-domain licensing.
-
 # 3  (Optional) sanity check
 python tests/sanity_check.py
 
@@ -55,5 +50,5 @@ delete the prefatory rows so the first row is the header
 `Year, ... , 10 year T.Bond, ...`, and save the sheet as  
 `data/histretSP_clean.csv`.  
 The file is © Aswath Damodaran, NYU Stern, licensed CC-BY 4.0; redistribution
-within this repository is permitted under that licence.
+within this repository is permitted under that license.
 
