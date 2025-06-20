@@ -45,7 +45,7 @@ Allocation.”*
 ---
 
 ## Quick-start
-
+```bash
 # 1  Create and activate virtual environment
 python -m venv venv
 # Windows:
@@ -61,7 +61,7 @@ python pam_optimize.py
 
 # 3  (Optional) sanity check
 python tests/sanity_check.py
-
+```
 ## Why are bond weights zero?
 
 Under a 95 % CVaR of real returns, every worst-tail block (e.g., 1979–1981
@@ -73,13 +73,14 @@ bonds with only a modest increase in capital.
 
 ## Damodaran bond data (CC-BY 4.0)
 
-# 1  Download histretSP.xls from
+### 1  Download histretSP.xls from
 https://www.stern.nyu.edu/~adamodar/pc/datasets/histretSP.xls
 
-# 2  Delete the prose rows so the first row is the header
+### 2  Delete the prose rows so the first row is the header
 Year, … , 10 year T.Bond, …
 
-# 3  Save the sheet as data/histretSP_clean.csv
+### 3  Save the sheet as data/histretSP_clean.csv
 (already present in this repo under CC-BY 4.0).
+
 
 No other manual downloads are required.
