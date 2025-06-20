@@ -35,7 +35,7 @@ def pv_factor(weights, block):
     growth = max(growth, EPS)          # prevent <=0
     return 1 / growth                  # smaller is better
 
-def objective(w, blocks, q=95):
+def objective(w, blocks, q=90):
     pv_vals = [pv_factor(w, b) for b in blocks]
     tail = np.percentile(pv_vals, q)
     shortfalls = [v for v in pv_vals if v >= tail]
