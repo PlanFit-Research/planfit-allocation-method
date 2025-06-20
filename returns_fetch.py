@@ -65,49 +65,25 @@ annual = (
 )
 
 # ------------------------------------------------------------------ #
-# 5) Damodaran 10-Year Treasury Total Return (.xls, CC-BY)
+# 5) Damodaran 10-Year Treasury Total Return (clean CSV in data/)
 # ------------------------------------------------------------------ #
-damo_url = "https://www.stern.nyu.edu/~adamodar/pc/datasets/histretSP.xls"
+csv_path = pathlib.Path(DATA_DIR) / "histretSP_clean.csv"
+if not csv_path.exists():
+    sys.exit("Damodaran CSV not found. Follow README to create "
+             "data/histretSP_clean.csv.")
+damo = pd.read_csv(csv_path)
 
-def load_damodaran(path_or_bytes):
-    raw = pd.read_excel(path_or_bytes, sheet_name=0, header=None, dtype=str)
-
-    # locate the first row that begins the numeric data grid
-    header_idx = None
-    for i, cell in enumerate(raw.iloc[:, 0]):
-        cell_str = str(cell).strip().lower()
-        if cell_str == "year":
-            header_idx = i
-            break
-        # if the cell looks like a 4-digit year, assume the header is above
-        if cell_str.isdigit() and len(cell_str) == 4:
-            header_idx = i - 1
-            break
-    if header_idx is None or header_idx < 0:
-        raise ValueError("Could not find header row in Damodaran sheet.")
-
-    df = pd.read_excel(path_or_bytes, sheet_name=0, header=header_idx)
-    return df
-
-try:
-    damo = load_damodaran(io.BytesIO(requests.get(damo_url, timeout=30).content))
-except Exception as e:
-    print("⚠  Online download failed:", e)
-    local = pathlib.Path(DATA_DIR) / "histretSP.xls"
-    if not local.exists():
-        sys.exit("Damodaran file missing. Download it manually into data/ .")
-    damo = load_damodaran(local)
-
-# normalise column names
+# Harmonise column names
 damo.columns = (damo.columns.str.strip()
                             .str.replace(r"\s+", " ", regex=True)
                             .str.lower())
 
-bond_col = [c for c in damo.columns if "bond" in c][0]  # e.g., '10 year t.bond'
+bond_col = [c for c in damo.columns if "bond" in c][0]   # e.g. '10 year t.bond'
 
 damo = (damo[["year", bond_col]]
           .rename(columns={"year": "Year", bond_col: "Bonds_nom_pct"})
           .dropna())
+
 damo["Year"] = damo["Year"].astype(int)
 damo["Bonds_nom"] = damo["Bonds_nom_pct"].astype(float) / 100
 
