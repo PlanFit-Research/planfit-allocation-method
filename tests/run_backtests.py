@@ -2,30 +2,19 @@
 """
 run_backtests.py — PlanFit vs. 60/40 stress‑test harness
 =======================================================
-Compares the capital‑efficiency of the **PlanFit aggregate SAA** with a classic
-60/40 mix under three lenses:
-
-1. *Deterministic worst‑block test* on **non‑overlapping** 30‑year slices of
-   history (1950‑1979 and 1980‑2009).
-2. *5 000 bootstrap* resamples of 30 annual return draws (with replacement).
-3. *Five‑year double‑CPI shock* applied to the 1980‑2009 block.
-
-The script now tolerates any of the following withdrawal formats:
-```
-210000.00
-$210,000.00
-(10,000.00)      # accounting negative
--10000
-```
+*Purpose* — Compare how much starting capital a household needs under
+PlanFit’s aggregate SAA versus a conventional 60/40 mix when both are
+subjected to historical sequence risk and a bootstrap robustness check.
 
 Usage
 -----
 ```powershell
-python Tests/run_backtests.py data/returns_1950_2022.csv data/withdrawals.csv --capital 3300000
+python Tests\run_backtests.py data\returns_1950_2022.csv \
+                            data\withdrawals.csv         \
+                            --capital 3300000
 ```
-The first two positional arguments are the returns and withdrawals CSV paths.
 
-The script prints a summary table and writes `results_summary.csv`.
+Outputs: prints two summary tables and writes `results_summary.csv`.
 """
 from __future__ import annotations
 
@@ -41,116 +30,162 @@ from scipy.optimize import brentq
 SEED = 42
 RNG = default_rng(SEED)
 
-###############################################################################
-# Data classes
-###############################################################################
-
+# ------------------------------------------------------------------
+# Data structures
+# ------------------------------------------------------------------
 @dataclass
 class Strategy:
     name: str
     weights: tuple[float, float, float]  # (stocks, bonds, cash)
-    start_capital: float  # PlanFit fixed; benchmark solved
+    start_capital: float                 # to be solved for benchmark
 
-###############################################################################
-# Helpers
-###############################################################################
+# ------------------------------------------------------------------
+# Loader helpers
+# ------------------------------------------------------------------
 
 def load_returns(path: Path) -> np.ndarray:
-    """Return N×3 ndarray of *real* returns."""
+    """Return an N×3 ndarray of float real returns."""
     df = pd.read_csv(path)
-    needed = {"Stocks", "Bonds", "Cash"}
-    if not needed.issubset(df.columns):
-        raise ValueError(f"{path} missing {needed - set(df.columns)}")
-    return df[["Stocks", "Bonds", "Cash"]].to_numpy(dtype=float)
+    req = {"Stocks", "Bonds", "Cash"}
+    if not req.issubset(df.columns):
+        raise ValueError(f"CSV must contain columns {req}")
+    return df[["Stocks", "Bonds", "Cash"]].astype(float).to_numpy()
 
 
 def load_withdrawals(path: Path) -> np.ndarray:
-    """Return a 1‑D float array after stripping $, commas, parentheses."""
+    """Return a 1‑D float vector of real withdrawals (positive = outflow)."""
     df = pd.read_csv(path).sort_values("Year")
-    if "RealWithdrawal" not in df.columns:
-        raise ValueError("withdrawals CSV must have RealWithdrawal column")
     col = (
         df["RealWithdrawal"].astype(str)
-        .str.replace(r"[,$]", "", regex=True)           # drop commas & $
-        .str.replace(r"\(([^)]+)\)", r"-\1", regex=True)  # (1000) -> -1000
+        .str.replace(r"[\$,]", "", regex=True)        # drop $ and commas
+        .str.replace(r"\(([^)]+)\)", r"-\1", regex=True)  # (1000) → -1000
         .str.strip()
+        .astype(float)
     )
-    return pd.to_numeric(col, errors="raise").to_numpy(dtype=float)
+    return col.to_numpy()
 
+# ------------------------------------------------------------------
+# Core simulation helpers
+# ------------------------------------------------------------------
 
-def simulate_path(returns_block: np.ndarray, w: tuple[float, float, float],
-                  capital: float, cashflows: np.ndarray) -> tuple[bool, float]:
+def simulate_path(
+    returns_block: np.ndarray,  # shape (H,3)
+    weights: tuple[float, float, float],
+    capital: float,
+    cashflows: np.ndarray,     # length H
+) -> tuple[bool, float]:
+    """Run one H‑year path; return (success?, ending wealth)."""
     wealth = capital
     for r_vec, cf in zip(returns_block, cashflows):
-        wealth = wealth * (1 + np.dot(w, r_vec)) - cf
+        wealth = wealth * (1 + np.dot(weights, r_vec)) - cf
         if wealth < 0:
             return False, wealth
     return True, wealth
 
 
-def worst_block_slices(mat: np.ndarray, horizon: int = 30):
+def rolling_slices(mat: np.ndarray, h: int) -> list[tuple[int, int]]:
+    """Return list of (start_idx, end_idx) inclusive‑exclusive windows."""
     n = mat.shape[0]
-    step = horizon  # non‑overlap
-    for start in range(0, n - horizon + 1, step):
-        yield start, start + horizon
+    return [(i, i + h) for i in range(0, n - h + 1)]
 
 
-def solve_benchmark_capital(ret: np.ndarray, cf: np.ndarray, w: tuple[float, float, float],
-                            target: float = 0.95):
-    slices = list(worst_block_slices(ret, len(cf)))
-    def gap(capital: float):
-        succ = sum(simulate_path(ret[s:e], w, capital, cf)[0] for s, e in slices)
-        return succ / len(slices) - target
-    return brentq(gap, 0.1e6, 20e6)
+def solve_benchmark_capital(
+    returns_mat: np.ndarray,
+    cashflows: np.ndarray,
+    weights: tuple[float, float, float],
+    target_success: float = 0.95,
+):
+    H = len(cashflows)
+    slices = rolling_slices(returns_mat, H)
+
+    def success_gap(capital: float):
+        succ = sum(
+            simulate_path(returns_mat[s:e], weights, capital, cashflows)[0]
+            for s, e in slices
+        )
+        return succ / len(slices) - target_success
+
+    return brentq(success_gap, 1e5, 3e7)
 
 
-def bootstrap_paths(ret: np.ndarray, horizon: int, n: int = 5000):
+def bootstrap_paths(mat: np.ndarray, h: int, block: int = 5, n: int = 5000):
+    """Yield bootstrap resamples built from (h/block) non‑overlapping blocks."""
+    n_rows = mat.shape[0]
+    n_blocks = h // block
     for _ in range(n):
-        idx = RNG.choice(ret.shape[0], size=horizon, replace=True)
-        yield ret[idx]
+        idx_blocks = RNG.choice(range(n_rows - block + 1), size=n_blocks)
+        rows = np.concatenate([mat[i : i + block] for i in idx_blocks], axis=0)
+        yield rows
 
-###############################################################################
-# Main
-###############################################################################
+# ------------------------------------------------------------------
+# Main driver
+# ------------------------------------------------------------------
 
 def main():
-    p = argparse.ArgumentParser(description="PlanFit benchmark & stress‑tests")
-    p.add_argument("returns", type=Path)
-    p.add_argument("withdrawals", type=Path)
-    p.add_argument("--capital", type=float, default=3.3e6)
-    args = p.parse_args()
+    parser = argparse.ArgumentParser(description="PlanFit benchmark & stress‑tests")
+    parser.add_argument("returns", type=Path, help="CSV of annual real returns")
+    parser.add_argument("withdrawals", type=Path, help="CSV of real withdrawals")
+    parser.add_argument("--capital", type=float, default=3.3e6, help="PlanFit starting capital")
+    args = parser.parse_args()
 
-    ret_mat   = load_returns(args.returns)
+    ret_mat = load_returns(args.returns)
     cashflows = load_withdrawals(args.withdrawals)
-    H         = len(cashflows)
+    H = len(cashflows)
 
-    planfit   = Strategy("PlanFit", (0.37, 0.0, 0.63), args.capital)
-    benchmark = Strategy("60/40",  (0.6,  0.4, 0.0),  0.0)
+    # --- define strategies ---
+    planfit = Strategy("PlanFit", (0.37, 0.0, 0.63), args.capital)
+    benchmark = Strategy("60/40", (0.6, 0.4, 0.0), 0.0)
+
+    # --- solve benchmark start capital ---
     benchmark.start_capital = solve_benchmark_capital(ret_mat, cashflows, benchmark.weights)
 
+    # --- deterministic rolling-window test ---
     rows = []
     for strat in [planfit, benchmark]:
-        endings = [simulate_path(ret_mat[s:e], strat.weights, strat.start_capital, cashflows)[1]
-                    for s, e in worst_block_slices(ret_mat, H)]
+        endings = [
+            simulate_path(ret_mat[s:e], strat.weights, strat.start_capital, cashflows)[1]
+            for s, e in rolling_slices(ret_mat, H)
+        ]
         endings = np.array(endings)
-        cvar5   = endings[np.argsort(endings)][: max(1, int(0.05*len(endings)))].mean()
-        rows.append({"Strategy": strat.name, "StartCap": strat.start_capital,
-                     "CVaR5": cvar5, "MeanEnd": endings.mean()})
+        cvar5 = endings[np.argsort(endings)][: max(1, int(0.05 * len(endings)))].mean()
+        rows.append(
+            {
+                "Strategy": strat.name,
+                "StartCap": strat.start_capital,
+                "CVaR5": cvar5,
+                "MeanEnd": endings.mean(),
+            }
+        )
+    det_summary = pd.DataFrame(rows)
 
-    print("\n=== Deterministic Worst‑Block Test ===")
-    print(pd.DataFrame(rows).to_string(index=False, float_format="%.0f"))
-
-    # Bootstrap capital inflation
-    def cap_inflation(strat: Strategy):
-        inc = []
-        for path in bootstrap_paths(ret_mat, H):
+    # --- bootstrap capital inflation ---
+    cap_infl = {planfit.name: [], benchmark.name: []}
+    for path in bootstrap_paths(ret_mat, H):
+        for strat in [planfit, benchmark]:
             ok, _ = simulate_path(path, strat.weights, strat.start_capital, cashflows)
-            inc.append(0.0 if ok else 1.0)  # 100 % inflation placeholder
-        return np.mean(inc)*100
+            if ok:
+                cap_infl[strat.name].append(0.0)
+            else:
+                # how much extra capital until success?
+                def gap(x):
+                    return simulate_path(path, strat.weights, strat.start_capital + x, cashflows)[0] - 1
+
+                extra = brentq(gap, 0, 2e6)
+                cap_infl[strat.name].append(extra / strat.start_capital)
+
+    # ------------------------------------------------------------------
+    # Display results
+    # ------------------------------------------------------------------
+    pd.set_option("display.float_format", "{:.0f}".format)
+    print("\n=== Deterministic Worst‑Block Test ===")
+    print(det_summary.to_string(index=False))
 
     print("\n=== Bootstrap Capital Inflation ===")
-    print(f"PlanFit : {cap_inflation(planfit):.2f}%")
-    print(f"60/40   : {cap_inflation(benchmark):.2f}%")
+    for name, lst in cap_infl.items():
+        print(f"{name:8s}: {np.mean(lst)*100:.2f}%")
+
+    det_summary.to_csv("results_summary.csv", index=False)
+
 
 if __name__ == "__main__":
     main()
