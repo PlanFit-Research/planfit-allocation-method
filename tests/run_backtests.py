@@ -139,12 +139,8 @@ def bootstrap_paths(returns: pd.DataFrame, years: int = 30, n: int = 5000):
 
 def main():
     parser = argparse.ArgumentParser(description="PlanFit benchmark & stress‑tests")
-    parser.add_argument("--returns", type=Path,
-                    default=Path("data/returns_1950_2022.csv"),
-                    help="CSV of annual real returns")
-    parser.add_argument("--withdrawals", type=Path,
-                    default=Path("data/withdrawals.csv"),
-                    help="CSV of real withdrawals")
+    parser.add_argument("returns", type=Path, help="CSV of annual real returns")
+    parser.add_argument("withdrawals", type=Path, help="CSV of real withdrawals")
     parser.add_argument("--capital", type=float, default=3.3e6, help="PlanFit starting capital")
     args = parser.parse_args()
 
