@@ -130,13 +130,10 @@ for col in ["Stocks_nom", "Bonds_nom", "Cash_nom"]:
 # ------------------------------------------------------------------ #
 annual.index.name = "Year" 
 
-out = (
-    annual[["Stocks_real", "Bonds_real", "Cash_real"]]
-      .reset_index()  
-      .rename(columns={
-          "Stocks_real": "Stocks",
-          "Bonds_real":  "Bonds",
-          "Cash_real":   "Cash"})
+out = annual[["Stocks_real", "Bonds_real", "Cash_real"]].copy()
+out["Year"] = np.arange(1950, 2023)  # 2023 is exclusive
+out = out[["Year", "Stocks_real", "Bonds_real", "Cash_real"]].rename(
+    columns={"Stocks_real": "Stocks", "Bonds_real": "Bonds", "Cash_real": "Cash"}
 )
 
 out_path = pathlib.Path(DATA_DIR) / "returns_1950_2022.csv"
