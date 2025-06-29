@@ -132,6 +132,7 @@ out = (
     annual[["Stocks_real", "Bonds_real", "Cash_real"]]
       .reset_index()
       .rename(columns={
+          "index": "Year",                
           "Stocks_real": "Stocks",
           "Bonds_real":  "Bonds",
           "Cash_real":   "Cash"})
