@@ -7,7 +7,7 @@ Compares the capital‑efficiency of the **PlanFit aggregate SAA** with a classi
 
 1. *Deterministic worst‑block test* on **non‑overlapping** 30‑year slices of
    history (1950‑1979, 1980‑2009).
-2. *5 000 bootstrap* resamples of 30 annual return draws (with replacement).
+2. *5000 bootstrap* resamples of 30 annual return draws (with replacement).
 3. *Five‑year inflation shock* (optional stub — left for future work).
 
 Input files
