@@ -128,9 +128,11 @@ for col in ["Stocks_nom", "Bonds_nom", "Cash_nom"]:
 # ------------------------------------------------------------------ #
 # 7) Write output CSV
 # ------------------------------------------------------------------ #
+annual.index.name = "Year" 
+
 out = (
     annual[["Stocks_real", "Bonds_real", "Cash_real"]]
-      .reset_index()    # this will create a Year column if index is named "Year"
+      .reset_index()  
       .rename(columns={
           "Stocks_real": "Stocks",
           "Bonds_real":  "Bonds",
