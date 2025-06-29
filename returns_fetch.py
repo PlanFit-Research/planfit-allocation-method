@@ -17,6 +17,7 @@ CVaR present-value factor across rolling blocks.
 
 import os, io, pathlib, sys, requests
 import pandas as pd
+import numpy as np
 
 DATA_DIR = "data"
 os.makedirs(DATA_DIR, exist_ok=True)
