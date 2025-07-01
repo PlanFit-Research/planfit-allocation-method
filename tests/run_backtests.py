@@ -98,10 +98,29 @@ def rolling_windows(mat: np.ndarray):
     for i in range(mat.shape[0]-H+1):
         yield mat[i:i+H]
 
-def solve_capital(mat: np.ndarray, cf: np.ndarray, sim_fn, target_w):
-    def succ(cap):
-        ok = sum(sim_fn(win, target_w, cap, cf)[0] for win in rolling_windows(mat))
-        return ok/44 >= TARGET_PASS
+def solve_capital(mat: np.ndarray, cf: np.ndarray, sim_fn, w: np.ndarray,
+                 target=0.95, lo=0.1e6, hi=10e6):
+    """Binary‑search start‑capital so that ≥ target windows succeed."""
+    windows = list(rolling_windows(mat, len(cf)))
+
+    def pass_rate(cap):
+        ok = sum(sim_fn(win, w, cap, cf)[0] for win in windows)
+        return ok / len(windows)
+
+    # widen upper bound if needed
+    while pass_rate(hi) < target:
+        hi *= 1.5
+        if hi > 1e8:
+            raise RuntimeError("Capital solve diverged > $100M")
+
+    # bisection
+    for _ in range(40):
+        mid = 0.5 * (lo + hi)
+        if pass_rate(mid) >= target:
+            hi = mid
+        else:
+            lo = mid
+    return hi ok/44 >= TARGET_PASS
     lo, hi = 1e5, 1e7
     while hi-lo > 1e3:
         mid = (hi+lo)/2
