@@ -246,4 +246,40 @@ def main():
         ruin = 1 - ok / len(windows)
         endings = np.array(endings)
         cvar5 = np.mean(np.sort(endings)[: max(1, int(0.05 * len(endings)))])
-        efficiency = cvar5 / strat.start_cap if strat.start
+                efficiency = cvar5 / strat.start_cap
+        rows.append({
+            "Strategy": strat.name,
+            "StartCap": round(strat.start_cap, 0),
+            "RuinPct":   round(ruin * 100, 2),
+            "CVaR5":     round(cvar5, 0),
+            "Efficiency": round(efficiency, 3)
+        })
+        if strat is planfit:
+            heat_rows = traj_matrix
+
+    # === table & CSV ===
+    df = pd.DataFrame(rows)
+    print("
+=== Deterministic 44-window Test ===")
+    print(df.to_string(index=False))
+    df.to_csv("results_summary.csv", index=False)
+
+    # === plots ===
+    plot_frontier(df)
+    if heat_rows:
+        plot_heatmap(heat_rows)
+
+    # --- bootstrap block retained for future use (commented) ---
+    # boot_infl = {s.name: [] for s in strategies}
+    # for path in bootstrap_paths(mat, H, 5, 5000):
+    #     for strat in strategies:
+    #         extra = 0.0
+    #         while not strat.sim_fn(path, strat.w,
+    #                                strat.start_cap + extra, cf)[0]:
+    #             extra += 0.05 * strat.start_cap
+    #         boot_infl[strat.name].append(extra / strat.start_cap)
+    # for name, lst in boot_infl.items():
+    #     print(f"{name}: {100*np.median(lst):.2f}% bootstrap add-on")
+
+if __name__ == "__main__":
+    main()
