@@ -2,19 +2,17 @@
 """
 run_backtests.py  –  PlanFit PoC   ·   60/40 Bonds   ·   60/40 Cash
 ====================================================================
-• Dynamic sleeve‑spend engine for PlanFit (cash first, then equity in each
+• Dynamic sleeve-spend engine for PlanFit (cash first, then equity in each
   horizon bucket; surplus/deficit rolls to the next sleeve).
 • Annual rebalancing for comparison mixes.
-• 44 rolling 30‑year windows (1950‑79 … 1993‑2022) → deterministic ≥ 95 % sizing.
-• 5 000 bootstrap paths built from six 5‑year blocks (preserves serial
-  structure).  *Bootstrap code kept but commented out by default.*
-• Outputs a tidy summary table **StartCap | Ruin % | CVaR₅ | Efficiency** to
-  console and CSV.
-• Generates two PNGs by default:
-    1. **frontier.png** – capital‑efficiency scatter (StartCap vs CVaR₅)
-    2. **funded_heatmap.png** – funded‑ratio heat‑map for PlanFit (rows = 44
-       windows, cols = years 1‑30).
-
+• 44 rolling 30-year windows (1950-79 … 1993-2022) → deterministic ≥ 95 % sizing.
+• 5 000 bootstrap paths built from six 5-year blocks (preserves serial structure).
+  *Bootstrap code kept but commented out by default.*
+• Outputs a tidy summary table **StartCap | Ruin % | CVaR₅ | Efficiency**
+  to console and CSV.
+• Generates two PNGs:
+      1. frontier.png        – capital-efficiency scatter
+      2. funded_heatmap.png  – funded-ratio heat-map for PlanFit
 Usage (inside venv)
 -------------------
     python Tests/run_backtests.py data/returns_1950_2022.csv \
@@ -24,8 +22,6 @@ Usage (inside venv)
 from __future__ import annotations
 
 import argparse
-import itertools
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -39,19 +35,19 @@ RNG = default_rng(42)
 # ---------------------------------------------------------------------
 # Data loaders
 # ---------------------------------------------------------------------
-
 def load_returns(path: Path) -> np.ndarray:
     df = pd.read_csv(path)
     return df[["Stocks", "Bonds", "Cash"]].to_numpy(dtype=float)
 
 
 def load_withdrawals(path: Path) -> np.ndarray:
+    """Read withdrawals as floats, stripping commas and parentheses."""
     df = pd.read_csv(path).sort_values("Year")
     col = (
         df["RealWithdrawal"]
         .astype(str)
         .str.replace(r"[,$]", "", regex=True)
-        .str.replace(r"\(([^)]+)\)", r"-\1", regex=True)  # (1000) -> -1000
+        .str.replace(r"\(([^)]+)\)", r"-\1", regex=True)  # (1000) ⇒ -1000
         .str.strip()
         .astype(float)
     )
@@ -60,7 +56,6 @@ def load_withdrawals(path: Path) -> np.ndarray:
 # ---------------------------------------------------------------------
 # Helper – rolling windows & bootstrap paths
 # ---------------------------------------------------------------------
-
 def rolling_windows(mat: np.ndarray, h: int = 30):
     n = mat.shape[0]
     for i in range(0, n - h + 1):
@@ -68,6 +63,7 @@ def rolling_windows(mat: np.ndarray, h: int = 30):
 
 
 def bootstrap_paths(mat: np.ndarray, h: int = 30, block: int = 5, n: int = 5000):
+    """Yield *n* bootstrap paths while preserving 5-year serial structure."""
     nrows = mat.shape[0]
     n_blocks = h // block
     for _ in range(n):
@@ -78,15 +74,11 @@ def bootstrap_paths(mat: np.ndarray, h: int = 30, block: int = 5, n: int = 5000)
 # ---------------------------------------------------------------------
 # Simulation engines
 # ---------------------------------------------------------------------
-
 def simulate_planfit(ret: np.ndarray, w: np.ndarray, cap: float, cf: np.ndarray):
     """Dynamic sleeve spend – cash first, then equity inside each horizon."""
     # initialise sleeves
-    stk_bal = w[0] * cap
-    bnd_bal = w[1] * cap
-    csh_bal = w[2] * cap
-
-    funded_traj = []  # for heat‑map
+    stk_bal, bnd_bal, csh_bal = w * cap
+    funded_traj = []  # for heat-map
 
     for t, (r_vec, wd) in enumerate(zip(ret, cf)):
         # grow sleeves
@@ -94,7 +86,7 @@ def simulate_planfit(ret: np.ndarray, w: np.ndarray, cap: float, cf: np.ndarray)
         bnd_bal *= 1 + r_vec[1]
         csh_bal *= 1 + r_vec[2]
 
-        # withdraw from cash then equity (stocks+bonds proportionally)
+        # withdraw from cash, then proportional from risk assets
         if wd <= csh_bal:
             csh_bal -= wd
         else:
@@ -103,12 +95,10 @@ def simulate_planfit(ret: np.ndarray, w: np.ndarray, cap: float, cf: np.ndarray)
             risk_bal = stk_bal + bnd_bal
             if risk_bal < short:
                 return False, 0.0, []  # ruin
-            # proportional depletion
-            if risk_bal > 0:
-                stk_bal -= short * (stk_bal / risk_bal)
-                bnd_bal -= short * (bnd_bal / risk_bal)
+            stk_bal -= short * (stk_bal / risk_bal)
+            bnd_bal -= short * (bnd_bal / risk_bal)
 
-        # funded ratio for heat‑map
+        # funded-ratio trajectory
         rem_liab = cf[t:].sum()
         funded = (stk_bal + bnd_bal + csh_bal) / rem_liab if rem_liab else 0
         funded_traj.append(funded)
@@ -124,14 +114,14 @@ def simulate_rebal(ret: np.ndarray, w: np.ndarray, cap: float, cf: np.ndarray):
         stk_bal *= 1 + r_vec[0]
         bnd_bal *= 1 + r_vec[1]
         csh_bal *= 1 + r_vec[2]
-        # withdraw proportional to current weights (after growth)
+        # withdraw proportional to current weights
         tot = stk_bal + bnd_bal + csh_bal
         if tot < wd:
             return False, 0.0
         stk_bal -= wd * (stk_bal / tot)
         bnd_bal -= wd * (bnd_bal / tot)
         csh_bal -= wd * (csh_bal / tot)
-        # rebalance to target weights at year‑end
+        # rebalance at year-end
         tot = stk_bal + bnd_bal + csh_bal
         stk_bal, bnd_bal, csh_bal = w * tot
     return True, stk_bal + bnd_bal + csh_bal
@@ -139,22 +129,21 @@ def simulate_rebal(ret: np.ndarray, w: np.ndarray, cap: float, cf: np.ndarray):
 # ---------------------------------------------------------------------
 # Capital solver (bisection)
 # ---------------------------------------------------------------------
-
 def solve_capital(mat: np.ndarray, cf: np.ndarray, sim_fn, w: np.ndarray,
-                 target=0.95, lo=0.1e6, hi=10e6):
+                  target=0.95, lo=0.1e6, hi=10e6):
     windows = list(rolling_windows(mat, len(cf)))
 
     def pass_rate(cap):
         ok = sum(sim_fn(win, w, cap, cf)[0] for win in windows)
         return ok / len(windows)
 
-    # Expand hi until pass_rate(lo) < target < pass_rate(hi)
+    # expand hi until target is bracketed
     while pass_rate(hi) < target:
         hi *= 1.5
         if hi > 50e6:
             raise RuntimeError("Capital solver failed to bracket target")
 
-    for _ in range(40):  # ≈ 1e-3 precision on 10‑M range
+    for _ in range(40):  # ≈1e-3 precision on a 10 M range
         mid = 0.5 * (lo + hi)
         if pass_rate(mid) >= target:
             hi = mid
@@ -165,7 +154,6 @@ def solve_capital(mat: np.ndarray, cf: np.ndarray, sim_fn, w: np.ndarray,
 # ---------------------------------------------------------------------
 # Plot helpers
 # ---------------------------------------------------------------------
-
 def plot_frontier(df: pd.DataFrame, out="frontier.png"):
     plt.figure(figsize=(6, 4))
     plt.scatter(df["StartCap"], df["CVaR5"], s=60)
@@ -174,7 +162,7 @@ def plot_frontier(df: pd.DataFrame, out="frontier.png"):
                      textcoords="offset points", xytext=(5, -5))
     plt.xlabel("Start Capital ($)")
     plt.ylabel("CVaR₅ ($)")
-    plt.title("Capital‑Efficiency Frontier")
+    plt.title("Capital-Efficiency Frontier")
     plt.tight_layout()
     plt.savefig(out, dpi=300)
     plt.close()
@@ -186,8 +174,8 @@ def plot_heatmap(traj: list[list[float]], out="funded_heatmap.png"):
     plt.imshow(arr, aspect="auto", cmap="RdYlGn", origin="lower")
     plt.colorbar(label="Funded Ratio")
     plt.xlabel("Year of Retirement Path")
-    plt.ylabel("44 Rolling Windows (1950‑79 … 1993‑2022)")
-    plt.title("PlanFit Funded‑Ratio Heat‑Map")
+    plt.ylabel("44 Rolling Windows (1950-79 … 1993-2022)")
+    plt.title("PlanFit Funded-Ratio Heat-Map")
     plt.tight_layout()
     plt.savefig(out, dpi=300)
     plt.close()
@@ -195,7 +183,6 @@ def plot_heatmap(traj: list[list[float]], out="funded_heatmap.png"):
 # ---------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------
-
 @dataclass
 class Strategy:
     name: str
@@ -213,23 +200,23 @@ def main():
     args = parser.parse_args()
 
     mat = load_returns(args.returns)
-    cf  = load_withdrawals(args.withdrawals)
-    H   = len(cf)
+    cf = load_withdrawals(args.withdrawals)
+    H = len(cf)
 
-    # PlanFit weights from Table 1 for H=30 ⇒ 37 % equity / 63 % cash
-    pf_w = np.array([0.37, 0.0, 0.63])
+    # PlanFit weights from Table 1 for H=30 ⇒ 37 % equity / 63 % cash
+    pf_w = np.array([0.37, 0.00, 0.63])
 
     # Strategy definitions (start_cap for comparators solved below)
     planfit = Strategy("PlanFit", pf_w, args.capital, simulate_planfit)
-    bond60  = Strategy("60/40 bonds", np.array([0.60, 0.40, 0.0]), 0.0, simulate_rebal)
+    bond60  = Strategy("60/40 bonds", np.array([0.60, 0.40, 0.00]), 0.0, simulate_rebal)
     cash60  = Strategy("60/40 cash",  np.array([0.60, 0.00, 0.40]), 0.0, simulate_rebal)
     strategies = [planfit, bond60, cash60]
 
-    # Solve start‑capital for comparators to hit ≥ 95 % pass
+    # size comparators for ≥95 % historical pass rate
     for strat in strategies[1:]:
         strat.start_cap = solve_capital(mat, cf, strat.sim_fn, strat.w)
 
-    # Run deterministic windows and gather funded trajectories for PlanFit
+    # deterministic back-test over 44 windows
     windows = list(rolling_windows(mat, H))
     rows, heat_rows = [], []
     for strat in strategies:
@@ -243,24 +230,26 @@ def main():
                 success, end_w = strat.sim_fn(win, strat.w, strat.start_cap, cf)
             ok += success
             endings.append(end_w)
+
         ruin = 1 - ok / len(windows)
         endings = np.array(endings)
         cvar5 = np.mean(np.sort(endings)[: max(1, int(0.05 * len(endings)))])
-                efficiency = cvar5 / strat.start_cap
+        efficiency = cvar5 / strat.start_cap
+
         rows.append({
             "Strategy": strat.name,
             "StartCap": round(strat.start_cap, 0),
-            "RuinPct":   round(ruin * 100, 2),
-            "CVaR5":     round(cvar5, 0),
+            "RuinPct":  round(ruin * 100, 2),
+            "CVaR5":    round(cvar5, 0),
             "Efficiency": round(efficiency, 3)
         })
+
         if strat is planfit:
             heat_rows = traj_matrix
 
     # === table & CSV ===
     df = pd.DataFrame(rows)
-    print("
-=== Deterministic 44-window Test ===")
+    print("\n=== Deterministic 44-window Test ===")
     print(df.to_string(index=False))
     df.to_csv("results_summary.csv", index=False)
 
@@ -280,6 +269,7 @@ def main():
     #         boot_infl[strat.name].append(extra / strat.start_cap)
     # for name, lst in boot_infl.items():
     #     print(f"{name}: {100*np.median(lst):.2f}% bootstrap add-on")
+
 
 if __name__ == "__main__":
     main()
