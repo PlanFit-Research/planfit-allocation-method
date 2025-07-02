@@ -1,27 +1,15 @@
 #!/usr/bin/env python3
 """
-run_backtests.py  –  PlanFit Allocation Method · PoC
-====================================================
-• Dynamic sleeve-spend engine for PlanFit (cash first, then equity in each
-  horizon bucket; surplus/deficit rolls to the next sleeve).
-• Annual rebalancing for comparison mixes.
-• 44 rolling 30-year windows (1950-79 … 1993-2022) → deterministic ≥ 95 % sizing.
-• 5 000 bootstrap paths (commented out) for future Monte Carlo robustness.
-• Outputs a tidy summary table
-
-      StartCap | Ruin % | CVaR₅ | MedianMult | Efficiency
-
-  to console and CSV.
-
-• Generates two PNGs:
-      1. frontier.png        – capital-efficiency scatter (StartCap vs CVaR₅)
-      2. funded_heatmap.png  – funded-ratio heat-map for PlanFit
-
-Usage (inside venv)
--------------------
-    python Tests/run_backtests.py data/returns_1950_2022.csv \
-                                 data/withdrawals.csv       \
-                                 --capital 3680000
+run_backtests.py  –  PlanFit Allocation Method · Proof of Concept
+=================================================================
+• Dynamic sleeve-spend engine for PlanFit (cash first, then equity per bucket).
+• Static 60/40 comparators (bonds & cash sleeves) with pro-rata withdrawals
+  and annual rebalancing.
+• 44 rolling 30-year windows (1950-79 … 1993-2022) sized to ≥ 95 % success.
+• Ruin severity recorded as the *remaining retirement liability* when failure
+  occurs, allowing CVaR₅ and Median Multiplier to reflect early-vs-late ruin.
+• Outputs table:  StartCap | Ruin % | CVaR₅ | MedianMult | Efficiency
+• Generates frontier.png  +  funded_heatmap.png (0-200 % scale).
 """
 from __future__ import annotations
 
@@ -32,13 +20,13 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from numpy.random import default_rng
 from matplotlib.colors import Normalize
+from numpy.random import default_rng
 
 RNG = default_rng(42)
 
 # ---------------------------------------------------------------------
-# Data loaders
+# Data loader
 # ---------------------------------------------------------------------
 def load_withdrawals(path: Path) -> np.ndarray:
     """Return a 1-D numpy array of real withdrawals (floats)."""
@@ -47,37 +35,30 @@ def load_withdrawals(path: Path) -> np.ndarray:
         df["RealWithdrawal"]
         .astype(str)
         .str.replace(r"[,$]", "", regex=True)
-        .str.replace(r"\(([^)]+)\)", r"-\1", regex=True)  # (1000) → -1000
+        .str.replace(r"\(([^)]+)\)", r"-\1", regex=True)   # (1000) → -1000
         .str.strip()
         .astype(float)
     )
     return col.to_numpy()
 
 # ---------------------------------------------------------------------
-# Helper – rolling windows & bootstrap paths
+# Rolling-window helper
 # ---------------------------------------------------------------------
 def rolling_windows(mat: np.ndarray, h: int = 30):
     n = mat.shape[0]
     for i in range(0, n - h + 1):
         yield mat[i : i + h]
 
-
-def bootstrap_paths(mat: np.ndarray, h: int = 30, block: int = 5, n: int = 5000):
-    """Yield n bootstrap paths preserving 5-year serial structure."""
-    nrows = mat.shape[0]
-    n_blocks = h // block
-    for _ in range(n):
-        idx = RNG.choice(range(nrows - block + 1), size=n_blocks)
-        rows = np.concatenate([mat[i : i + block] for i in idx], axis=0)
-        yield rows
-
 # ---------------------------------------------------------------------
 # Simulation engines
 # ---------------------------------------------------------------------
 def simulate_planfit(ret: np.ndarray, w: np.ndarray, cap: float, cf: np.ndarray):
-    """Dynamic sleeve spend – cash first, then equity inside each horizon."""
+    """
+    PlanFit dynamic sleeve spend — cash first, then proportional from risk sleeves.
+    Returns (success_bool, terminal_wealth, funded_ratio_trajectory).
+    """
     stk_bal, bnd_bal, csh_bal = w * cap
-    funded_traj = []  # for heat-map
+    funded_traj = []
 
     for t, (r_vec, wd) in enumerate(zip(ret, cf)):
         # grow sleeves
@@ -85,20 +66,21 @@ def simulate_planfit(ret: np.ndarray, w: np.ndarray, cap: float, cf: np.ndarray)
         bnd_bal *= 1 + r_vec[1]
         csh_bal *= 1 + r_vec[2]
 
-        # withdraw from cash then proportional from risk assets
+        # spend from cash then risk sleeves
         if wd <= csh_bal:
             csh_bal -= wd
         else:
             short = wd - csh_bal
             csh_bal = 0.0
             risk_bal = stk_bal + bnd_bal
-            if risk_bal < short:
-                return False, 0.0, []  # ruin
+            if risk_bal < short:  # ruin
+                rem_liab = short + cf[t + 1 :].sum()
+                return False, -rem_liab, funded_traj
             stk_bal -= short * (stk_bal / risk_bal)
             bnd_bal -= short * (bnd_bal / risk_bal)
 
         # funded-ratio trajectory
-        rem_liab = cf[t:].sum()
+        rem_liab = cf[t + 1 :].sum()
         funded = (stk_bal + bnd_bal + csh_bal) / rem_liab if rem_liab else 0
         funded_traj.append(funded)
 
@@ -106,27 +88,33 @@ def simulate_planfit(ret: np.ndarray, w: np.ndarray, cap: float, cf: np.ndarray)
 
 
 def simulate_rebal(ret: np.ndarray, w: np.ndarray, cap: float, cf: np.ndarray):
-    """Comparison mix with annual perfect rebalance."""
+    """
+    Static mix: pro-rata withdrawal, then perfect annual rebalance.
+    Returns (success_bool, terminal_wealth).
+    """
     stk_bal, bnd_bal, csh_bal = w * cap
-    for r_vec, wd in zip(ret, cf):
+    for t, (r_vec, wd) in enumerate(zip(ret, cf)):
         # grow
         stk_bal *= 1 + r_vec[0]
         bnd_bal *= 1 + r_vec[1]
         csh_bal *= 1 + r_vec[2]
-        # withdraw proportional to current weights
+
         tot = stk_bal + bnd_bal + csh_bal
-        if tot < wd:
-            return False, 0.0
+        if tot < wd:  # ruin
+            rem_liab = (wd - tot) + cf[t + 1 :].sum()
+            return False, -rem_liab
+        # pro-rata withdrawal
         stk_bal -= wd * (stk_bal / tot)
         bnd_bal -= wd * (bnd_bal / tot)
         csh_bal -= wd * (csh_bal / tot)
-        # rebalance at year-end
+
+        # rebalance
         tot = stk_bal + bnd_bal + csh_bal
         stk_bal, bnd_bal, csh_bal = w * tot
     return True, stk_bal + bnd_bal + csh_bal
 
 # ---------------------------------------------------------------------
-# Capital solver (bisection)
+# Capital solver (bisection for ≥ 95 % success)
 # ---------------------------------------------------------------------
 def solve_capital(mat: np.ndarray, cf: np.ndarray, sim_fn, w: np.ndarray,
                   target=0.95, lo=0.1e6, hi=10e6):
@@ -136,18 +124,14 @@ def solve_capital(mat: np.ndarray, cf: np.ndarray, sim_fn, w: np.ndarray,
         ok = sum(sim_fn(win, w, cap, cf)[0] for win in windows)
         return ok / len(windows)
 
-    # expand hi until target is bracketed
     while pass_rate(hi) < target:
         hi *= 1.5
         if hi > 50e6:
             raise RuntimeError("Capital solver failed to bracket target")
 
-    for _ in range(40):  # ≈1e-3 precision on 10 M range
+    for _ in range(40):
         mid = 0.5 * (lo + hi)
-        if pass_rate(mid) >= target:
-            hi = mid
-        else:
-            lo = mid
+        hi, lo = (mid, lo) if pass_rate(mid) >= target else (hi, mid)
     return hi
 
 # ---------------------------------------------------------------------
@@ -169,22 +153,15 @@ def plot_frontier(df: pd.DataFrame, out="frontier.png"):
 
 def plot_heatmap(traj: list[list[float]], start_years: list[int],
                  out="funded_heatmap.png"):
-    """Heat-map clipped to 0-200 % funded; y-axis shows window start year."""
     arr = np.array(traj)
     plt.figure(figsize=(6, 6))
-    im = plt.imshow(
-        arr,
-        aspect="auto",
-        cmap="RdYlGn",
-        origin="lower",
-        norm=Normalize(vmin=0, vmax=2),  # 0–200 %
-    )
+    im = plt.imshow(arr, aspect="auto", origin="lower",
+                    cmap="RdYlGn", norm=Normalize(vmin=0, vmax=2))
     plt.colorbar(im, label="Funded Ratio")
     plt.xlabel("Year of Retirement Path")
     plt.ylabel("Start Year of 30-Year Window")
-    # y-ticks every 5 years for readability
-    tick_idx = np.arange(0, len(start_years), 5)
-    plt.yticks(tick_idx, [start_years[i] for i in tick_idx])
+    yt = np.arange(0, len(start_years), 5)
+    plt.yticks(yt, [start_years[i] for i in yt])
     plt.title("PlanFit Funded-Ratio Heat-Map")
     plt.tight_layout()
     plt.savefig(out, dpi=300)
@@ -202,64 +179,56 @@ class Strategy:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="PlanFit vs static mixes")
-    parser.add_argument("returns", type=Path)
-    parser.add_argument("withdrawals", type=Path)
-    parser.add_argument("--capital", type=float, default=3.68e6,
-                        help="PlanFit starting capital")
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser(description="PlanFit vs static mixes")
+    ap.add_argument("returns", type=Path)
+    ap.add_argument("withdrawals", type=Path)
+    ap.add_argument("--capital", type=float, default=3.68e6,
+                    help="PlanFit starting capital")
+    args = ap.parse_args()
 
-    # Need year column for heat-map labels
-    df_ret     = pd.read_csv(args.returns)
-    start_year = int(df_ret["Year"].iloc[0])
-    years_col  = df_ret["Year"].astype(int).to_list()
-    mat        = df_ret[["Stocks", "Bonds", "Cash"]].to_numpy(dtype=float)
+    # returns CSV must include a 'Year' column for heat-map labels
+    df_ret    = pd.read_csv(args.returns)
+    years_col = df_ret["Year"].astype(int).to_list()
+    mat       = df_ret[["Stocks", "Bonds", "Cash"]].to_numpy(float)
 
     cf = load_withdrawals(args.withdrawals)
     H  = len(cf)
 
-    # PlanFit weights (Table 1): 37 % equity / 63 % cash for a 30-year horizon
-    pf_w = np.array([0.37, 0.00, 0.63])
+    pf_w = np.array([0.37, 0.0, 0.63])  # PlanFit 30-yr weights
 
-    # Strategy definitions
     planfit = Strategy("PlanFit", pf_w, args.capital, simulate_planfit)
-    bond60  = Strategy("60/40 bonds", np.array([0.60, 0.40, 0.00]), 0.0, simulate_rebal)
-    cash60  = Strategy("60/40 cash",  np.array([0.60, 0.00, 0.40]), 0.0, simulate_rebal)
+    bond60  = Strategy("60/40 bonds", np.array([0.6, 0.4, 0.0]), 0.0, simulate_rebal)
+    cash60  = Strategy("60/40 cash",  np.array([0.6, 0.0, 0.4]), 0.0, simulate_rebal)
     strategies = [planfit, bond60, cash60]
 
-    # Solve start-capital for comparators to hit ≥95 % pass
+    # solve comparator start-caps for ≥ 95 % pass
     for strat in strategies[1:]:
         strat.start_cap = solve_capital(mat, cf, strat.sim_fn, strat.w)
 
-    # Deterministic windows
     windows = list(rolling_windows(mat, H))
     rows, heat_rows = [], []
     for strat in strategies:
-        ok, endings = 0, []
-        traj_matrix = []
+        ok, endings, traj_matrix = 0, [], []
         for win in windows:
             if strat is planfit:
-                success, end_w, traj = strat.sim_fn(win, strat.w, strat.start_cap, cf)
+                success, end_w, traj = strat.sim_fn(
+                    win, strat.w, strat.start_cap, cf
+                )
                 traj_matrix.append(traj)
             else:
-                success, end_w = strat.sim_fn(win, strat.w, strat.start_cap, cf)
-            ok     += success
+                success, end_w = strat.sim_fn(
+                    win, strat.w, strat.start_cap, cf
+                )
+            ok += success
             endings.append(end_w)
 
         ruin        = 1 - ok / len(windows)
         endings     = np.array(endings)
-
-        # ---- CVaR₅: allow negative by penalizing ruin with −1 yr withdrawal ----
-        shortfall   = -cf[0]
-        endings_adj = np.where(endings == 0, shortfall, endings)
-        n_tail      = max(1, int(0.05 * len(endings_adj)))
-        cvar5       = np.mean(np.sort(endings_adj)[: n_tail])
+        n_tail      = max(1, int(0.05 * len(endings)))
+        cvar5       = np.mean(np.sort(endings)[: n_tail])
         efficiency  = cvar5 / strat.start_cap
 
-        # ---- Median terminal multiplier (survivors only) ----
-        survivors   = endings[endings > 0]
-        median_mult = (np.median(survivors) / strat.start_cap
-                       if survivors.size else 0.0)
+        median_mult = np.median(endings) / strat.start_cap  # all paths
 
         rows.append({
             "Strategy":    strat.name,
@@ -284,18 +253,6 @@ def main():
     if heat_rows:
         start_years = years_col[: len(years_col) - H + 1]
         plot_heatmap(heat_rows, start_years)
-
-    # --- bootstrap block retained for future use (commented) ---
-    # boot_infl = {s.name: [] for s in strategies}
-    # for path in bootstrap_paths(mat, H, 5, 5000):
-    #     for strat in strategies:
-    #         extra = 0.0
-    #         while not strat.sim_fn(path, strat.w,
-    #                                strat.start_cap + extra, cf)[0]:
-    #             extra += 0.05 * strat.start_cap
-    #         boot_infl[strat.name].append(extra / strat.start_cap)
-    # for name, lst in boot_infl.items():
-    #     print(f"{name}: {100*np.median(lst):.2f}% bootstrap add-on")
 
 
 if __name__ == "__main__":
