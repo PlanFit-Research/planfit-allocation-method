@@ -224,17 +224,19 @@ def main():
 
         ruin        = 1 - ok / len(windows)
         endings     = np.array(endings)
-        n_tail      = max(1, int(0.05 * len(endings)))
-        cvar5       = np.mean(np.sort(endings)[: n_tail])
-        efficiency  = cvar5 / strat.start_cap
+        n_tail         = max(1, int(0.05 * len(endings)))
+        cvar5          = np.mean(np.sort(endings)[: n_tail])
+        efficiency     = cvar5 / strat.start_cap
 
-        median_mult = np.median(endings) / strat.start_cap  # all paths
+        median_tw      = np.median(endings)                  # $ median
+        median_mult    = median_tw / strat.start_cap         # multiple
 
         rows.append({
             "Strategy":    strat.name,
             "StartCap":    round(strat.start_cap, 0),
             "RuinPct":     round(ruin * 100, 2),
             "CVaR5":       round(cvar5, 0),
+            "MedianTW":    round(median_tw, 0),
             "MedianMult":  round(median_mult, 3),
             "Efficiency":  round(efficiency, 3),
         })
