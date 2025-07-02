@@ -47,7 +47,7 @@ def load_withdrawals(path: Path) -> np.ndarray:
         df["RealWithdrawal"]
         .astype(str)
         .str.replace(r"[,$]", "", regex=True)
-        .str.replace(r"\(([^)]+)\)", r"-\\1", regex=True)  # (1000) → -1000
+        .str.replace(r"\(([^)]+)\)", r"-\1", regex=True)  # (1000) → -1000
         .str.strip()
         .astype(float)
     )
