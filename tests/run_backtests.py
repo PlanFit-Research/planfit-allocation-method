@@ -5,11 +5,19 @@ run_backtests.py  –  PlanFit Allocation Method · Proof of Concept
 • Dynamic sleeve-spend engine for PlanFit (cash first, then equity per bucket).
 • Static 60/40 comparators (bonds & cash sleeves) with pro-rata withdrawals
   and annual rebalancing.
-• 44 rolling 30-year windows (1950-79 … 1993-2022) sized to ≥ 95 % success.
-• Ruin severity recorded as the *remaining retirement liability* when failure
-  occurs, allowing CVaR₅ and Median Multiplier to reflect early-vs-late ruin.
-• Outputs table:  StartCap | Ruin % | CVaR₅ | MedianMult | Efficiency
-• Generates frontier.png  +  funded_heatmap.png (0-200 % scale).
+• 44 rolling 30-year windows (1950-79 … 1993-2022).
+
+  TWO SIZING MODES
+  ----------------
+  1. Equal-Probability (default) –– Each strategy is sized to clear a 95 %
+     historical success bar.  Invoke with **no --fixed flag**.
+  2. Capital-Constraint            –– All strategies start with the same
+     user-supplied --capital.      Invoke with **--fixed --capital X**.
+
+• Ruin severity = remaining retirement liability at failure, so CVaR₅ and
+  MedianMult account for early- vs late-ruin.
+• Outputs table:  StartCap | Ruin % | CVaR₅ | MedianTW | MedianMult | Efficiency
+• Generates frontier.png  +  funded_heatmap.png (0-200 % funded scale).
 """
 from __future__ import annotations
 
@@ -185,8 +193,12 @@ def main():
     ap = argparse.ArgumentParser(description="PlanFit vs static mixes")
     ap.add_argument("returns", type=Path)
     ap.add_argument("withdrawals", type=Path)
-    ap.add_argument("--capital", type=float, default=None,
-                    help="PlanFit starting capital; omit to size to 95 % pass")
+    parser.add_argument("--capital", type=float, default=None,
+                          help="If --fixed is set, this amount is used for ALL strategies."
+                             " Otherwise it is PlanFit’s start-cap (omit to auto-size).")
+    parser.add_argument("--fixed", action="store_true",
+                        help="Run a capital-constraint test: every portfolio starts with"
+                             " the same --capital and no solver runs.")
     args = ap.parse_args()
 
     # returns CSV must include a 'Year' column for heat-map labels
@@ -199,20 +211,34 @@ def main():
 
     pf_w = np.array([0.37, 0.0, 0.63])  # PlanFit 30-yr weights
 
+    # ─── portfolio definitions ─────────────────────────────────────────────
     planfit = Strategy("PlanFit", pf_w, 0.0, simulate_planfit)
     bond60  = Strategy("60/40 bonds", np.array([0.6, 0.4, 0.0]), 0.0, simulate_rebal)
     cash60  = Strategy("60/40 cash",  np.array([0.6, 0.0, 0.4]), 0.0, simulate_rebal)
     strategies = [planfit, bond60, cash60]
 
-    # --- size PlanFit if --capital omitted ---------------------------------
-    if args.capital is None:
-        planfit.start_cap = solve_capital(mat, cf, planfit.sim_fn, planfit.w)
-    else:
+    # ─── sizing logic (three modes) ────────────────────────────────────────
+    if args.fixed:                              # ➊ capital-constraint test
+        if args.capital is None:
+            ap.error("--fixed requires --capital")
         planfit.start_cap = args.capital
+        for strat in strategies[1:]:
+            strat.start_cap = args.capital
 
-    # solve comparator start-caps for ≥ 95 % pass
-    for strat in strategies[1:]:
-        strat.start_cap = solve_capital(mat, cf, strat.sim_fn, strat.w)
+    else:                                       # ➋ equal-probability modes
+        # PlanFit
+        if args.capital is None:                # auto-size to 95 %
+            planfit.start_cap = solve_capital(mat, cf,
+                                              planfit.sim_fn, planfit.w)
+            print(f"Solved PlanFit StartCap (95 %): "
+                  f"${planfit.start_cap:,.0f}")
+        else:                                   # user-supplied PlanFit capital
+            planfit.start_cap = args.capital
+
+        # Comparators solved to 95 % pass
+        for strat in strategies[1:]:
+            strat.start_cap = solve_capital(mat, cf,
+                                            strat.sim_fn, strat.w)
 
     windows = list(rolling_windows(mat, H))
     rows, heat_rows = [], []
