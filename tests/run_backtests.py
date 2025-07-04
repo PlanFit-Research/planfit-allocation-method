@@ -193,10 +193,10 @@ def main():
     ap = argparse.ArgumentParser(description="PlanFit vs static mixes")
     ap.add_argument("returns", type=Path)
     ap.add_argument("withdrawals", type=Path)
-    parser.add_argument("--capital", type=float, default=None,
+    ap.add_argument("--capital", type=float, default=None,
                           help="If --fixed is set, this amount is used for ALL strategies."
                              " Otherwise it is PlanFit’s start-cap (omit to auto-size).")
-    parser.add_argument("--fixed", action="store_true",
+    ap.add_argument("--fixed", action="store_true",
                         help="Run a capital-constraint test: every portfolio starts with"
                              " the same --capital and no solver runs.")
     args = ap.parse_args()
