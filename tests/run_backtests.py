@@ -164,7 +164,7 @@ def plot_frontier(df, out="frontier.png"):
 
 def plot_heatmap(traj: list[list[float]], start_years: list[int],
                  out="funded_heatmap.png"):
-    arr = np.array(traj)
+    arr = np.array(traj)[:, :-1]
     plt.figure(figsize=(6, 6))
     im = plt.imshow(arr, aspect="auto", origin="lower",
                     cmap="RdYlGn", norm=Normalize(vmin=0, vmax=2))
