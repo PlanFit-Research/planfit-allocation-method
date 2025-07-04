@@ -182,8 +182,8 @@ def main():
     ap = argparse.ArgumentParser(description="PlanFit vs static mixes")
     ap.add_argument("returns", type=Path)
     ap.add_argument("withdrawals", type=Path)
-    ap.add_argument("--capital", type=float, default=3.68e6,
-                    help="PlanFit starting capital")
+    ap.add_argument("--capital", type=float, default=None,
+                    help="PlanFit starting capital; omit to size to 95 % pass")
     args = ap.parse_args()
 
     # returns CSV must include a 'Year' column for heat-map labels
@@ -196,10 +196,16 @@ def main():
 
     pf_w = np.array([0.37, 0.0, 0.63])  # PlanFit 30-yr weights
 
-    planfit = Strategy("PlanFit", pf_w, args.capital, simulate_planfit)
+    planfit = Strategy("PlanFit", pf_w, 0.0, simulate_planfit)
     bond60  = Strategy("60/40 bonds", np.array([0.6, 0.4, 0.0]), 0.0, simulate_rebal)
     cash60  = Strategy("60/40 cash",  np.array([0.6, 0.0, 0.4]), 0.0, simulate_rebal)
     strategies = [planfit, bond60, cash60]
+
+    # --- size PlanFit if --capital omitted ---------------------------------
+    if args.capital is None:
+        planfit.start_cap = solve_capital(mat, cf, planfit.sim_fn, planfit.w)
+    else:
+        planfit.start_cap = args.capital
 
     # solve comparator start-caps for ≥ 95 % pass
     for strat in strategies[1:]:
