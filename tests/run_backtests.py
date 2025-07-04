@@ -148,19 +148,19 @@ def solve_capital(mat: np.ndarray, cf: np.ndarray, sim_fn, w: np.ndarray,
 # ---------------------------------------------------------------------
 # Plot helpers
 # ---------------------------------------------------------------------
-def plot_frontier(df: pd.DataFrame, out="frontier.png"):
+def plot_frontier(df, out="frontier.png"):
     plt.figure(figsize=(6, 4))
-    plt.scatter(df["StartCap"], df["CVaR5"], s=60)
+    plt.scatter(df["RTC"], df["MWM"], s=60)
     for _, row in df.iterrows():
-        plt.annotate(row["Strategy"], (row["StartCap"], row["CVaR5"]),
+        plt.annotate(row["Strategy"], (row["RTC"], row["MWM"]),
                      textcoords="offset points", xytext=(5, -5))
-    plt.xlabel("Start Capital ($)")
-    plt.ylabel("CVaR₅ ($)")
-    plt.title("Capital-Efficiency Frontier")
+    plt.axvline(0, color="grey", lw=0.6)   # break-even tail cushion
+    plt.xlabel("Relative Tail Cushion  (CVaR₅ ÷ StartCap)")
+    plt.ylabel("Median Wealth Multiple  (MedianTW ÷ StartCap)")
+    plt.title("Capital-Efficiency Frontier – Capital Constraint")
     plt.tight_layout()
     plt.savefig(out, dpi=300)
     plt.close()
-
 
 def plot_heatmap(traj: list[list[float]], start_years: list[int],
                  out="funded_heatmap.png"):
@@ -272,8 +272,8 @@ def main():
             "RuinPct":     round(ruin * 100, 2),
             "CVaR5":       round(cvar5, 0),
             "MedianTW":    round(median_tw, 0),
-            "MedianMult":  round(median_mult, 3),
-            "Efficiency":  round(efficiency, 3),
+            "MWM":  round(median_mult, 3),
+            "RTC":  round(efficiency, 3),
         })
 
         if strat is planfit:
