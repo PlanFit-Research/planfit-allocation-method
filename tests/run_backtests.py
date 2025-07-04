@@ -73,8 +73,11 @@ def simulate_planfit(ret: np.ndarray, w: np.ndarray, cap: float, cf: np.ndarray)
             short = wd - csh_bal
             csh_bal = 0.0
             risk_bal = stk_bal + bnd_bal
-            if risk_bal < short:  # ruin
+            if risk_bal < short:          # ---- ruin ----
+                deficit   = wd - (csh_bal + risk_bal)      # same formula as comparators
                 rem_liab = short + cf[t + 1 :].sum()
+                # pad the funded-ratio path so total length == H
+                funded_traj.extend([0] * (len(cf) - t))   # current + all future years
                 return False, -rem_liab, funded_traj
             stk_bal -= short * (stk_bal / risk_bal)
             bnd_bal -= short * (bnd_bal / risk_bal)
