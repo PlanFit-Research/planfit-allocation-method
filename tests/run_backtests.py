@@ -304,7 +304,9 @@ def main():
 
     print("\n=== Bootstrap capital add-on (5-year block resampling) ===")
     for name, lst in boot_infl.items():
-        print(f"{name:12}: {100 * np.median(lst):5.2f}% median add-on")
+        pct_need = 100 * sum(x > 0 for x in lst) / len(lst)
+        print(f"{name:12}: median add-on {100*np.median(lst):5.2f}% "
+            f"| paths needing add-on = {pct_need:4.1f}%")
 
     # === table & CSV ===
     df = pd.DataFrame(rows)
