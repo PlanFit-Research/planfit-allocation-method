@@ -226,8 +226,8 @@ def main():
 
     # ─── portfolio definitions ─────────────────────────────────────────────
     planfit = Strategy("PlanFit", pf_w, 0.0, simulate_planfit)
-    bond60  = Strategy("40/60 bonds", np.array([0.4, 0.6, 0.0]), 0.0, simulate_rebal)
-    cash60  = Strategy("40/60 cash",  np.array([0.4, 0.0, 0.6]), 0.0, simulate_rebal)
+    bond60  = Strategy("60/40 bonds", np.array([0.6, 0.4, 0.0]), 0.0, simulate_rebal)
+    cash60  = Strategy("60/40 cash",  np.array([0.6, 0.0, 0.4]), 0.0, simulate_rebal)
     strategies = [planfit, bond60, cash60]
 
     # ─── sizing logic (three modes) ────────────────────────────────────────
