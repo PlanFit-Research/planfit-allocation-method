@@ -60,14 +60,15 @@ def rolling_windows(mat: np.ndarray, h: int = 30):
 # ---------------------------------------------------------------------
 # Bootstrap helper – stitches together 6 random 5-year blocks
 # ---------------------------------------------------------------------
-def bootstrap_paths(mat: np.ndarray, horizon: int = 30,
-                    block: int = 5, n: int = 5000):
-    nrows = mat.shape[0]
-    n_blocks = horizon // block
-    for _ in range(n):
-        idx = RNG.choice(range(nrows - block + 1), size=n_blocks)
-        rows = np.concatenate([mat[i:i + block] for i in idx], axis=0)
-        yield rows
+if False:     # ← set to True to run
+    def bootstrap_paths(mat: np.ndarray, horizon: int = 30,
+                        block: int = 5, n: int = 5000):
+        nrows = mat.shape[0]
+        n_blocks = horizon // block
+        for _ in range(n):
+            idx = RNG.choice(range(nrows - block + 1), size=n_blocks)
+            rows = np.concatenate([mat[i:i + block] for i in idx], axis=0)
+            yield rows
 
 # ---------------------------------------------------------------------
 # Simulation engines
@@ -225,8 +226,8 @@ def main():
 
     # ─── portfolio definitions ─────────────────────────────────────────────
     planfit = Strategy("PlanFit", pf_w, 0.0, simulate_planfit)
-    bond60  = Strategy("60/40 bonds", np.array([0.6, 0.4, 0.0]), 0.0, simulate_rebal)
-    cash60  = Strategy("60/40 cash",  np.array([0.6, 0.0, 0.4]), 0.0, simulate_rebal)
+    bond60  = Strategy("40/60 bonds", np.array([0.4, 0.6, 0.0]), 0.0, simulate_rebal)
+    cash60  = Strategy("40/60 cash",  np.array([0.4, 0.0, 0.6]), 0.0, simulate_rebal)
     strategies = [planfit, bond60, cash60]
 
     # ─── sizing logic (three modes) ────────────────────────────────────────
@@ -291,22 +292,23 @@ def main():
         if strat is planfit:
             heat_rows = traj_matrix
     # --- optional Monte-Carlo robustness ---------------------------------
-    boot_infl = {s.name: [] for s in strategies}
+    if False:     # ← set to True to run
+        boot_infl = {s.name: [] for s in strategies}
 
-    for path in bootstrap_paths(mat, H, block=5, n=5000):
-        for strat in strategies:
-            extra = 0.0
-            # keep adding 5 % of start capital until path survives
-            while not strat.sim_fn(path, strat.w,
-                                   strat.start_cap + extra, cf)[0]:
-                extra += 0.05 * strat.start_cap
-            boot_infl[strat.name].append(extra / strat.start_cap)
+        for path in bootstrap_paths(mat, H, block=5, n=5000):
+            for strat in strategies:
+                extra = 0.0
+                # keep adding 5 % of start capital until path survives
+                while not strat.sim_fn(path, strat.w,
+                                       strat.start_cap + extra, cf)[0]:
+                    extra += 0.05 * strat.start_cap
+                boot_infl[strat.name].append(extra / strat.start_cap)
 
-    print("\n=== Bootstrap capital add-on (5-year block resampling) ===")
-    for name, lst in boot_infl.items():
-        pct_need = 100 * sum(x > 0 for x in lst) / len(lst)
-        print(f"{name:12}: median add-on {100*np.median(lst):5.2f}% "
-            f"| paths needing add-on = {pct_need:4.1f}%")
+        print("\n=== Bootstrap capital add-on (5-year block resampling) ===")
+        for name, lst in boot_infl.items():
+            pct_need = 100 * sum(x > 0 for x in lst) / len(lst)
+            print(f"{name:12}: median add-on {100*np.median(lst):5.2f}% "
+                f"| paths needing add-on = {pct_need:4.1f}%")
 
     # === table & CSV ===
     df = pd.DataFrame(rows)
