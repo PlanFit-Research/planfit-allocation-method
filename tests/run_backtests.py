@@ -170,7 +170,7 @@ def plot_frontier(df, out="frontier.png"):
     plt.axvline(0, color="grey", lw=0.6)   # break-even tail cushion
     plt.xlabel("Relative Tail Cushion  (CVaR₅ ÷ Start Capital)")
     plt.ylabel("Median Wealth Multiple\n(Median Terminal Wealth ÷ Start Capital)")
-    plt.title("Capital-Efficiency Frontier")
+    plt.title("Figure 3. Capital-Efficiency Frontier")
     plt.tight_layout()
     plt.savefig(out, dpi=300)
     plt.close()
